@@ -29,6 +29,7 @@ Renderer::Renderer()
     bLMBPressed = false;
 
     renderMode = RENDER_MODE::RM_DEFAULT;
+    bShowBVH = false;
 }
 
 const glm::uvec2& Renderer::GetScreenSize()
@@ -96,7 +97,7 @@ void Renderer::Run()
     Models.push_back(sponza);
 
     Model* SciFiHelmet = new Model("C:\\Users\\kwonh\\Desktop\\study\\Graphics\\PathTrace_GPGPU\\resources\\models\\\helmet\\SciFiHelmet.gltf");
-    SciFiHelmet->translation = glm::vec3(0.f, 30.f, 0.f);
+    SciFiHelmet->translation = glm::vec3(0.f, 10.f, -30.f);
     SciFiHelmet->rotation = glm::vec4(0.f);
     SciFiHelmet->scale = 10.0f;
     Models.push_back(SciFiHelmet);
@@ -120,6 +121,8 @@ void Renderer::Run()
     bvh.Cluster_K_MEAS_Recursive(bvh.rootCluster,5);
     std::cout << "Build ClusterMesh" << std::endl;
     bvh.GenClusterMesh(bvh.rootCluster);
+    std::cout << "Build BVH tree" << std::endl;
+    bvh.rootBVH = bvh.GenBVHTree(bvh.rootCluster);
     std::cout << "Pre process done" << std::endl;
 
     double currentTime = glfwGetTime();
@@ -160,7 +163,20 @@ void Renderer::Run()
         default:
             break;
         }
-        
+
+        if (bShowBVH)
+        {
+            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+            glDisable(GL_CULL_FACE);
+
+            bvh.BoxShader->use();
+            bvh.BoxShader->setMat4("view", camera->GetViewMat());
+            bvh.BoxShader->setMat4("projection", camera->GetProjMat());
+            bvh.drawBVHTree(bvh.rootBVH);
+
+            glEnable(GL_CULL_FACE);
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        }
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -209,6 +225,17 @@ void processInput(GLFWwindow* window)
     if (glfwGetKey(window, GLFW_KEY_F2) == GLFW_PRESS)
     {
         renderer.renderMode = RENDER_MODE::RM_MESH_CLUSTER;
+    }
+
+    static bool ignoreKeyB = false;
+    if (glfwGetKey(window, GLFW_KEY_B) == GLFW_PRESS && !ignoreKeyB)
+    {
+        renderer.bShowBVH = !renderer.bShowBVH;
+        ignoreKeyB = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_B) == GLFW_RELEASE)
+    {
+        ignoreKeyB = false;
     }
 
 

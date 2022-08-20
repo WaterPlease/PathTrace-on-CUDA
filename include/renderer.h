@@ -31,6 +31,7 @@ public:
 	RENDER_MODE renderMode;
 
 	bool bLMBPressed;
+	bool bShowBVH;
 	glm::vec2 prevMousePos;
 
 	const glm::uvec2& GetScreenSize();

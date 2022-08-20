@@ -172,6 +172,8 @@
     <ClInclude Include="include\texture.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="resources\BoxFrag.glsl" />
+    <None Include="resources\BoxVertex.glsl" />
     <None Include="resources\fragment.glsl" />
     <None Include="resources\fragment_cluster.glsl" />
     <None Include="resources\vertex.glsl" />

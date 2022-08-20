@@ -11,4 +11,6 @@ uniform sampler2D texture_normal;
 void main()
 {
     FragColor = texture(texture_basecolor, TexCoord);
+    if (FragColor.w < 3e-1)
+        discard;
 }
