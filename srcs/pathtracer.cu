@@ -40,10 +40,6 @@ __device__ vec3 GetPixelDirection(int px, int py, curandState *s)
 
 __global__ void StartRender(int W, int H, Color* image, Sphere* spheres, Triangle* triangles, int Ns, int Nt, int SampleIDX)
 {
-	//int px = threadIdx.x + blockIdx.x * blockDim.x;
-	//int py = threadIdx.y + blockIdx.y * blockDim.y;
-	//int pid = px + py * blockDim.x * gridDim.x;
-	//int offset = blockIdx.x * blockDim.x + threadIdx.x;
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
 	int stride = blockDim.x * gridDim.x;
 	curandState s;
@@ -55,11 +51,11 @@ __global__ void StartRender(int W, int H, Color* image, Sphere* spheres, Triangl
 		vec3 direction = GetPixelDirection(px, py, &s);
 
 		Color pixelColor(0.f,0.f,0.f);
-		for(int i=0;i< NUM_SAMPLE;i++)
-			pixelColor += GetColor(Ray(CameraPos, direction), spheres, triangles, Ns, Nt, 0,&s);
-
+		for (int i = 0; i < NUM_SAMPLE; i++)
+		{
+			pixelColor += GetColor_iter(Ray(CameraPos, direction), spheres, triangles, Ns, Nt, 0, &s);
+		}
 		image[offset] += pixelColor / (float)(NUM_SAMPLE);
-		//image[offset] = Color(1.0f, 0.0f, 0.0f) * ((float)(offset)/ (float)(W * H));
 	}
 }
 

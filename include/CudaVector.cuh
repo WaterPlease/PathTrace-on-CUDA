@@ -141,6 +141,12 @@ __host__ __device__ inline vec3& vec3::operator/=(const float t) {
     e[2] *= k;
     return *this;
 }
+__host__ __device__ inline float MaxFrom(const vec3& v)
+{
+    float val = (v.x() > v.y()) ? v.x() : v.y();
+    val       = (val   > v.z()) ? val   : v.z();
+    return val;
+}
 
 __host__ __device__ inline float vec3::dot(const vec3& v2) const
 {

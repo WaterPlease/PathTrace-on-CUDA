@@ -10,7 +10,9 @@
 #include "CudaPrimitive.cuh"
 
 #define MAX_PATH_DEPTH (1)
-#define MAX_BOUNCE (3)
+#define MAX_BOUNCE (8)
+#define RUSSIAN_ROULETTE_BOUNCE (4)
+#define PROB_STOP_BOUNCE (0.7f)
 #define NUM_MULTI_SAMPLE (8)
 #define NUM_SAMPLE (2048)
 #define PI (3.141592f)
@@ -91,37 +93,84 @@ __device__ bool RayCast(const Ray& ray, Sphere* spheres, Triangle* triangles, in
 
 __device__ Color GetColor(const Ray& ray, Sphere* spheres, Triangle* triangles, int Ns, int Nt, int Depth, curandState* s)
 {
+    const Color Black(0.f, 0.f, 0.f);
     if (Depth >= MAX_BOUNCE) return Color(0.f, 0.f, 0.f);
 
-    Color color(0.f, 0.f, 0.f);
+    Color color = Black;
 
     HitResult hitResult;
     if (RayCast(ray, spheres, triangles, Ns, Nt, hitResult))
     {
         color = hitResult.mat.emittance;
-        //Color irradiance(0.f, 0.f, 0.f);
 
-        //for (int i = 0; i < NUM_SAMPLE; i++)
-        //{
-            vec3 reflectedRay;
-            float prob = SampleHemisphere(s, reflectedRay, hitResult.normal);
-            Ray outRay(hitResult.p + hitResult.normal * 0.001, reflectedRay);
-            float cosW = dot(hitResult.normal, reflectedRay);
-            cosW = (cosW > 0.f) ? cosW : 0.f;
-            Color irradiance = INV_PI * hitResult.mat.albedo * GetColor(outRay, spheres, triangles, Ns, Nt, Depth + 1,s) * cosW / prob;
-        //}
-
-            color += irradiance;// / (float)NUM_SAMPLE;
-    }
-    else
-    {
-        vec3 unit_direction = Normalize(ray.dir);
-        float t = 0.5f * (unit_direction.y() + 1.0f);
-        color = (1.0f - t) * Color(1.0f, 1.0f, 1.0f) + t * Color(0.5f, 0.7f, 1.0f);
+        vec3 reflectedRay;
+        float prob = SampleHemisphere(s, reflectedRay, hitResult.normal);
+        Ray outRay(hitResult.p + hitResult.normal * 0.001, reflectedRay);
+        float cosW = dot(hitResult.normal, reflectedRay);
+        cosW = (cosW > 0.f) ? cosW : 0.f;
+        Color irradiance = INV_PI * hitResult.mat.albedo * GetColor(outRay, spheres, triangles, Ns, Nt, Depth + 1,s) * cosW / prob;
+        color += irradiance;
     }
     return color;
 }
+__device__ Color GetColor_iter(const Ray& ray, Sphere* spheres, Triangle* triangles, int Ns, int Nt, int Depth, curandState* s)
+{
+    const Color Black(0.f, 0.f, 0.f);
 
+    Color color = Black;
+    Color reflections[MAX_BOUNCE];
+    Color emittances[MAX_BOUNCE];
+
+
+    HitResult hitResult;
+    Ray currentRay = ray;
+    for (; Depth < MAX_BOUNCE; Depth++)
+    {
+        if (RayCast(currentRay, spheres, triangles, Ns, Nt, hitResult))
+        {
+            emittances[Depth] = hitResult.mat.emittance;
+
+            vec3 reflectedRay;
+            float prob = SampleHemisphere(s, reflectedRay, hitResult.normal);
+            currentRay = Ray(hitResult.p + hitResult.normal * 0.001, reflectedRay);
+            float cosW = dot(hitResult.normal, reflectedRay);
+            cosW = (cosW > 0.f) ? cosW : 0.f;
+
+            reflections[Depth] = INV_PI * hitResult.mat.albedo * cosW / prob;
+
+            if (Depth >= RUSSIAN_ROULETTE_BOUNCE)
+            {
+                float probToStop = MaxFrom(reflections[Depth-1]);
+                probToStop = (probToStop < PROB_STOP_BOUNCE)?   probToStop : PROB_STOP_BOUNCE;
+                float sample = curand_uniform(s);
+                if (sample < probToStop)
+                {
+                    reflections[Depth] *= (1.f / probToStop);
+                }
+                else
+                {
+                    Depth += 1;
+                    break;
+                }
+            }
+        }
+        else
+        {
+            reflections[Depth] = Black;
+            emittances[Depth] =  Black;
+            Depth+=1;
+            break;
+        }
+    }
+    Depth -= 1;
+
+    for (; Depth >= 0; --Depth)
+    {
+        color = emittances[Depth] + color * reflections[Depth];
+    }
+
+    return color;
+}
 __host__ __device__ Color ACESFilm(Color x)
 {
     float a = 2.51f;

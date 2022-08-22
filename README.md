@@ -1,6 +1,6 @@
 # Path tracer on CUDA
 
-![MainImg](./Img/Render/DiffuseRoom_MS8x2048spp_13min.png)
+![MainImg](./Img/Render/DiffuseRoom_MS8x2048spp8bounce_22min.png)
 
 Simple path tracer renderer using CUDA.
 
@@ -8,7 +8,9 @@ Simple path tracer renderer using CUDA.
 
 # Features
 
-- Diffuse reflection (Lambertian)
+- Path tracer on CUDA
+  - Diffuse reflection (Lambertian)
+  - Non recursive implementation
 - BVH construction using clustering algorithm
   - ![BVH](./Img/Doc/BVH.png)
 - Simple scene viewer on OpenGL 4.6
