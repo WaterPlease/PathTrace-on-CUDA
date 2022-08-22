@@ -21,6 +21,8 @@ Renderer::Renderer()
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
     camera = new Camera();
+    camera->SetRotation(glm::vec3(0.f,90.f,0.f));
+    camera->pos = glm::vec3(0.f, 10.f, 40.0f);
     cameraMoveSpeed = 100.f;
     cameraRotSpeed = 0.1f;
 

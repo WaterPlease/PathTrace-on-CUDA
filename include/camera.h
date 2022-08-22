@@ -19,9 +19,9 @@ public:
 	float near;
 	float far;
 
-	const glm::vec3& GetForward();
-	const glm::vec3& GetUp();
-	const glm::vec3& GetRight();
+	const glm::vec3 GetForward();
+	const glm::vec3 GetUp();
+	const glm::vec3 GetRight();
 
 	const Camera& AddRotation(glm::vec3 deltaRotation);
 	const Camera& SetRotation(glm::vec3 _rotation);

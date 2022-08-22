@@ -159,14 +159,22 @@
     <ClCompile Include="srcs\renderer.cpp" />
     <ClCompile Include="srcs\shader.cpp" />
     <ClCompile Include="srcs\texture.cpp" />
+    <CudaCompile Include="srcs\CudaUtil.cu" />
+    <CudaCompile Include="srcs\pathtracer.cu" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\bvh.h" />
     <ClInclude Include="include\camera.h" />
+    <ClInclude Include="include\CudaColor.cuh" />
+    <ClInclude Include="include\CudaPrimitive.cuh" />
+    <ClInclude Include="include\CudaRay.cuh" />
     <ClInclude Include="include\cudaTest.cuh" />
+    <ClInclude Include="include\CudaUtil.cuh" />
+    <ClInclude Include="include\CudaVector.cuh" />
     <ClInclude Include="include\image.h" />
     <ClInclude Include="include\mesh.h" />
     <ClInclude Include="include\model.h" />
+    <ClInclude Include="include\pathtracer.cuh" />
     <ClInclude Include="include\renderer.h" />
     <ClInclude Include="include\shader.h" />
     <ClInclude Include="include\texture.h" />

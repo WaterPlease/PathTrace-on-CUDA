@@ -74,6 +74,24 @@
     <ClInclude Include="include\mesh.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="include\pathtracer.cuh">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="include\CudaUtil.cuh">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="include\CudaVector.cuh">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="include\CudaColor.cuh">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="include\CudaRay.cuh">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="include\CudaPrimitive.cuh">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="resources\vertex.glsl">
@@ -97,6 +115,12 @@
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="srcs\cudaTest.cu">
+      <Filter>소스 파일</Filter>
+    </CudaCompile>
+    <CudaCompile Include="srcs\pathtracer.cu">
+      <Filter>소스 파일</Filter>
+    </CudaCompile>
+    <CudaCompile Include="srcs\CudaUtil.cu">
       <Filter>소스 파일</Filter>
     </CudaCompile>
   </ItemGroup>

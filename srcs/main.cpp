@@ -10,7 +10,7 @@
 
 #include "renderer.h"
 
-#include "cudaTest.cuh"
+#include "pathtracer.cuh"
 
 const unsigned int SCR_WIDTH = 1440;
 const unsigned int SCR_HEIGHT = 810;
@@ -31,8 +31,6 @@ MessageCallback(GLenum source,
 
 int main(void)
 {
-    //Test();
-    //return 0;
 
     Renderer& renderer = Renderer::GetInstance();
     renderer.SetScreenSize(glm::uvec2(SCR_WIDTH, SCR_HEIGHT));
@@ -42,7 +40,11 @@ int main(void)
     // During init, enable debug output
     //glEnable(GL_DEBUG_OUTPUT);
     //glDebugMessageCallback(MessageCallback, 0);
-
+    
+    PathTracer tracer;
+    tracer.Render(*renderer.camera);
+    return 0;
+    
     renderer.Run();
     
     return 0;

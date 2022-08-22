@@ -19,19 +19,19 @@ Camera::Camera(glm::vec3 _pos) : Camera()
 	pos = _pos;
 }
 
-const glm::vec3& Camera::GetForward()
+const glm::vec3 Camera::GetForward()
 {
 	return forward;
 }
 
-const glm::vec3& Camera::GetUp()
+const glm::vec3 Camera::GetUp()
 {
 	return up;
 }
 
-const glm::vec3& Camera::GetRight()
+const glm::vec3 Camera::GetRight()
 {
-	return glm::normalize(glm::cross(GetForward(), GetUp()));
+	return glm::normalize(glm::cross(forward, up));
 }
 
 const Camera& Camera::AddRotation(glm::vec3 deltaRotation)
