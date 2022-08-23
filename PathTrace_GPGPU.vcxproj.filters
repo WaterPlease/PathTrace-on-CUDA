@@ -123,5 +123,8 @@
     <CudaCompile Include="srcs\CudaUtil.cu">
       <Filter>소스 파일</Filter>
     </CudaCompile>
+    <CudaCompile Include="srcs\CudaPrimitive.cu">
+      <Filter>소스 파일</Filter>
+    </CudaCompile>
   </ItemGroup>
 </Project>

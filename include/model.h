@@ -159,6 +159,28 @@ private:
             else
                 vertex.TexCoords = glm::vec2(0.0f, 0.0f);
 
+            aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
+            aiColor3D basecolor(0.f, 0.f, 0.f);
+            aiColor3D emissive(0.f, 0.f, 0.f);
+            ai_real metallicFactor;
+            ai_real roughnessFactor;
+
+            material->Get(AI_MATKEY_COLOR_DIFFUSE, basecolor);
+            material->Get(AI_MATKEY_COLOR_EMISSIVE, emissive);
+            material->Get(AI_MATKEY_METALLIC_FACTOR, metallicFactor);
+            material->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughnessFactor);
+
+            vertex.mat.albedo.r = basecolor.r;
+            vertex.mat.albedo.g = basecolor.g;
+            vertex.mat.albedo.b = basecolor.b;
+
+            vertex.mat.emittance.r = emissive.r;
+            vertex.mat.emittance.g = emissive.g;
+            vertex.mat.emittance.b = emissive.b;
+
+            vertex.mat.metallic = metallicFactor;
+            vertex.mat.roughness = roughnessFactor;
+
             vertices.push_back(vertex);
         }
         // now wak through each of the mesh's faces (a face is a mesh its triangle) and retrieve the corresponding vertex indices.
@@ -179,7 +201,6 @@ private:
         // diffuse: texture_diffuseN
         // specular: texture_specularN
         // normal: texture_normalN
-
         // 1. diffuse maps
         // aiTextureType_DIFFUSE
         vector<Texture> basecolorMaps = loadMaterialTextures(material, aiTextureType_BASE_COLOR, "texture_basecolor");

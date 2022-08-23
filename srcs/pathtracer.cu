@@ -7,6 +7,7 @@
 #include <glm/glm.hpp>
 
 #include "CudaUtil.cuh"
+#include "bvh.h"
 
 #include <iostream>
 #include <chrono>
@@ -31,14 +32,14 @@ __constant__ int2 ScreenSize;
 
 __device__ vec3 GetPixelDirection(int px, int py, curandState *s)
 {
-	vec3 OffsetRight =  (((float)px + curand_uniform(s)) / (float)(ScreenSize.x-1) - 0.5f) * tan(CameraFovX * 0.5f) * CameraRight;
-	vec3 OffsetUp    = -(((float)py + curand_uniform(s)) / (float)(ScreenSize.y-1) - 0.5f) * tan(CameraFovY * 0.5f) * CameraUp;
+	vec3 OffsetRight = 2.f*(((float)px + curand_uniform(s)) / (float)(ScreenSize.x - 1) - 0.5f) * tan(CameraFovX * 0.5f) * CameraRight;
+	vec3 OffsetUp = -2.f*(((float)py + curand_uniform(s)) / (float)(ScreenSize.y - 1) - 0.5f) * tan(CameraFovY * 0.5f) * CameraUp;
 	vec3 direction = Normalize(CameraForward + OffsetRight + OffsetUp);
 
 	return direction;
 }
 
-__global__ void StartRender(int W, int H, Color* image, Sphere* spheres, Triangle* triangles, int Ns, int Nt, int SampleIDX)
+__global__ void StartRender(int W, int H, Color* image, Triangle* triangles, int Nt, CudaBVHNode* BVHTree, int Nb, int SampleIDX)
 {
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
 	int stride = blockDim.x * gridDim.x;
@@ -53,7 +54,7 @@ __global__ void StartRender(int W, int H, Color* image, Sphere* spheres, Triangl
 		Color pixelColor(0.f,0.f,0.f);
 		for (int i = 0; i < NUM_SAMPLE; i++)
 		{
-			pixelColor += GetColor_iter(Ray(CameraPos, direction), spheres, triangles, Ns, Nt, 0, &s);
+			pixelColor += GetColor_iter(Ray(CameraPos, direction), triangles, Nt, BVHTree, Nb, 0, &s);
 		}
 		image[offset] += pixelColor / (float)(NUM_SAMPLE);
 	}
@@ -68,93 +69,76 @@ __global__ void ClearImage(Color* rawImage, int N)
 	}
 }
 
-void PathTracer::Render(Camera& camera)
+void exportImage(Image& img, const Color* rawData, const char* path, int H, int W, int SampleCnt)
+{
+	// write to image
+	Pixel* pixels = img.GetData();
+	Color pixelColor;
+	int cursor = 0;
+
+	for (int i = 0; i < (H * W); i++)
+	{
+		pixelColor = rawData[i];
+		pixelColor /= (float)SampleCnt;
+		pixelColor = ACESFilm(pixelColor);
+		pixels[cursor] = ConverToUint8(pixelColor.r());
+		cursor++;
+		pixels[cursor] = ConverToUint8(pixelColor.g());
+		cursor++;
+		pixels[cursor] = ConverToUint8(pixelColor.b());
+		cursor++;
+	}
+
+	if (img.WriteTo(path))
+	{
+		std::cout << "Export Success" << std::endl;
+	}
+	else
+	{
+		std::cout << "Export failed" << std::endl;
+	}
+}
+
+void PathTracer::Render(Camera& camera, BVH* bvh)
 {
 	int W, H, C;
-	W = 1280;
-	H = 720;
+	std::cout << "Camera : " << camera.Screen_W << " x " << camera.Screen_H << std::endl;
+	W = camera.Screen_W;
+	H = camera.Screen_H;
 	C = 3;
 	Image img(W,H,C);
+		
+	LoadFromBVH(bvh);
 
-	// load primitives
-	Sphere* sphere = new Sphere();
-	sphere->center = vec3(0.f, 2.f, 0.0f);
-	sphere->rad = 2.f;
-	sphere->mat.albedo = Color(0.7f, 0.7f, 0.7f);
+	std::cout << "Tree on GPU Size : " << CudaBVH.size()   << std::endl;
+	std::cout << "Prim on GPU Size : " << CudaPrims.size() << std::endl;
+	std::cout << "Prim on CPU Size : " << bvh->rootBVH->primCnt << std::endl;
 	
-	// cornell height & width
-	float CH = 10.f;
-	float CW = 6.f;
-	float ALW = 3.0f;
-	float offset = -0.01f;
-
-	camera.pos.y = CH * 0.5f;
-	
-	vec3 V0(-CW, 0, glm::max(CW, camera.pos.z));
-	vec3 V1( CW, 0, glm::max(CW, camera.pos.z));
-	//vec3 V0(-CW, 0, CW);
-	//vec3 V1( CW, 0, CW);
-	vec3 V2( CW, 0,-CW);
-	vec3 V3(-CW, 0,-CW);
-
-	vec3 V4(-CW,CH, glm::max(CW, camera.pos.z));
-	vec3 V5( CW,CH, glm::max(CW, camera.pos.z));
-	//vec3 V4(-CW,CH, CW);
-	//vec3 V5( CW,CH, CW);
-	vec3 V6( CW,CH,-CW);
-	vec3 V7(-CW,CH,-CW);
-
-	vec3 V8 (-ALW, CH + offset, ALW);
-	vec3 V9 ( ALW, CH + offset, ALW);
-	vec3 V10( ALW, CH + offset,-ALW);
-	vec3 V11(-ALW, CH + offset,-ALW);
-
-	Material MatGreenWall;
-	MatGreenWall.albedo = vec3(0.1f, 1.f, 0.1f);
-	MatGreenWall.emittance = vec3(0.f, 0.0f, 0.f);
-	Material MatRedWall;
-	MatRedWall.albedo = vec3(1.0f, 0.1f, 0.1f);
-	MatRedWall.emittance = vec3(0.0f, 0.f, 0.f);
-	Material MatWhiteWall;
-	MatWhiteWall.albedo = vec3(1.0f, 1.0f, 1.0f);
-	MatWhiteWall.emittance = vec3(0.0f, 0.0f, 0.0f);
-	Material MatAreaLight;
-	MatAreaLight.albedo = vec3(0.3f, 0.3f, 0.3f);
-	MatAreaLight.emittance = vec3(5.f, 5.f, 5.f);
-
-	Triangle trs[10+2];
-
-	trs[0].Copy(V3, V7, V4, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, MatRedWall);
-	trs[1].Copy(V4, V0, V3, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, MatRedWall);
-
-	trs[2].Copy(V5, V6, V2, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, MatGreenWall);
-	trs[3].Copy(V5, V2, V1, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, MatGreenWall);
-
-	trs[4].Copy(V0, V1, V2, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, MatWhiteWall);
-	trs[5].Copy(V2, V3, V0, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, MatWhiteWall);
-	trs[6].Copy(V2, V6, V7, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, MatWhiteWall);
-	trs[7].Copy(V2, V7, V3, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, MatWhiteWall);
-	trs[8].Copy(V4, V7, V6, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, MatWhiteWall);
-	trs[9].Copy(V4, V6, V5, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, MatWhiteWall);
-
-	trs[10].Copy(V8, V11, V10, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, MatAreaLight);
-	trs[11].Copy(V8, V10, V9 , 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, MatAreaLight);
-
 	std::cout << "Upload world on GPU" << std::endl;
 
-	Sphere* spheres;
+	
 	Triangle* triangles;
-	checkCudaErrors(cudaMallocManaged(&spheres,     sizeof(Sphere) * 1));
-	checkCudaErrors(cudaMallocManaged(&triangles, sizeof(Triangle) * 12));
+	int NumTriangle = CudaPrims.size();
 
-	InitHittables<Sphere> << <1, 1 >> >   (spheres,1,0);
-	InitHittables<Triangle> << <1, 1 >> > (triangles, 12, 0);
+	CudaBVHNode* BVHTree;
+	int NumTreeNode = CudaBVH.size();
+
+	checkCudaErrors(cudaMallocManaged(&triangles, sizeof(Triangle) * NumTriangle));
+	checkCudaErrors(cudaMallocManaged(&BVHTree, sizeof(CudaBVHNode) * NumTreeNode));
+
+	InitHittables<Triangle> << <1, 1 >> > (triangles, NumTriangle, 0);
 	checkCudaErrors(cudaDeviceSynchronize());
 
-	spheres[0].Copy(*sphere);
-	for (int i = 0; i < 12; i++)
-		triangles[i].Copy(trs[i]);
+	for (int i = 0; i < NumTriangle; i++)
+		triangles[i].Copy(CudaPrims[i]);
 	checkCudaErrors(cudaDeviceSynchronize());
+
+	for (int i = 0; i < NumTreeNode; i++)
+	{
+		BVHTree[i] = CudaBVH[i];
+	}
+	checkCudaErrors(cudaDeviceSynchronize());
+
 
 	// copy camera setting
 	std::cout << "Upload camera configuration on GPU" << std::endl;
@@ -182,7 +166,7 @@ void PathTracer::Render(Camera& camera)
 
 
 	size_t stackSize;
-	checkCudaErrors(cudaThreadSetLimit(cudaLimitStackSize, 1024 * 128));
+	//checkCudaErrors(cudaThreadSetLimit(cudaLimitStackSize, 1024 * 128));
 	checkCudaErrors(cudaDeviceSynchronize());
 	checkCudaErrors(cudaThreadGetLimit(&stackSize, cudaLimitStackSize));
 	checkCudaErrors(cudaDeviceSynchronize());
@@ -204,40 +188,23 @@ void PathTracer::Render(Camera& camera)
 	for (int i = 0; i < NUM_MULTI_SAMPLE; i++)
 	{
 		//ImageTest<<<numBlock,threadPerBlock>>>(W, H, rawData);
-		StartRender << <gridDim, blockDim >> > (W, H, rawData, spheres, triangles,1,12, i);
+		StartRender << <gridDim, blockDim >> > (W, H, rawData, triangles, NumTriangle, BVHTree, NumTreeNode, i);
 		checkCudaErrors(cudaGetLastError());
 		checkCudaErrors(cudaDeviceSynchronize());
 		checkCudaErrors(cudaGetLastError());
 		std::cout << "Sample "<< i <<" : Delta time : " << duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count() - currentMillisecTime << " (ms)" << std::endl;
+
+		exportImage(img, rawData, "temp.png", H, W,i+1);
 	}
 	auto DeltaMillisecTime = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count() - currentMillisecTime;
 	std::cout << "Delta time : " << DeltaMillisecTime << " (ms)" << std::endl;
 
 
-	// write to image
-	Pixel* pixels = img.GetData();
-
-	int cursor = 0;
-
-	for (int i = 0; i < (H * W); i++)
-	{
-		rawData[i] /= (float)NUM_MULTI_SAMPLE;
-		rawData[i] = ACESFilm(rawData[i]);
-		pixels[cursor] = ConverToUint8(rawData[i].r());
-		cursor++;
-		pixels[cursor] = ConverToUint8(rawData[i].g());
-		cursor++;
-		pixels[cursor] = ConverToUint8(rawData[i].b());
-		cursor++;
-	}
+	exportImage(img, rawData, "result.png", H, W, NUM_MULTI_SAMPLE);
 
 	checkCudaErrors(cudaFree(rawData));
-	if (img.WriteTo("test.png"))
-	{
-		std::cout << "Export Success" << std::endl;
-	}
-	else
-	{
-		std::cout << "Export failed" << std::endl;
-	}
+
+	cudaFree(triangles);
+	cudaFree(BVHTree);
 }
+

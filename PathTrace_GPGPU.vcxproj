@@ -150,6 +150,7 @@
   <ItemGroup>
     <ClCompile Include="srcs\bvh.cpp" />
     <ClCompile Include="srcs\camera.cpp" />
+    <CudaCompile Include="srcs\CudaPrimitive.cu" />
     <CudaCompile Include="srcs\cudaTest.cu" />
     <ClCompile Include="srcs\glad.c" />
     <ClCompile Include="srcs\image.cpp" />

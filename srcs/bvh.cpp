@@ -9,7 +9,7 @@
 #include "model.h"
 #include "mesh.h"
 
-BVH::BVH()
+void BVH::Init()
 {
 	BoxShader = new Shader("C:\\Users\\kwonh\\Desktop\\study\\Graphics\\PathTrace_GPGPU\\resources\\BoxVertex.glsl", "C:\\Users\\kwonh\\Desktop\\study\\Graphics\\PathTrace_GPGPU\\resources\\BoxFrag.glsl");
 
@@ -73,7 +73,7 @@ void BVH::drawBVHTree(BVHNode* node)
 		return;
 	}
 
-	if (node->Child[0] == nullptr || node->Child[1] == nullptr)
+	if (node->Child[0] == nullptr && node->Child[1] == nullptr)
 	{
 		drawBVHNode(node);
 		return;

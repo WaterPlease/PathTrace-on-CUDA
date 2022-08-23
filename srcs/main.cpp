@@ -12,8 +12,8 @@
 
 #include "pathtracer.cuh"
 
-const unsigned int SCR_WIDTH = 1440;
-const unsigned int SCR_HEIGHT = 810;
+const unsigned int SCR_WIDTH =  1920;
+const unsigned int SCR_HEIGHT = 1080;
 
 void GLAPIENTRY
 MessageCallback(GLenum source,
@@ -41,9 +41,7 @@ int main(void)
     //glEnable(GL_DEBUG_OUTPUT);
     //glDebugMessageCallback(MessageCallback, 0);
     
-    PathTracer tracer;
-    tracer.Render(*renderer.camera);
-    return 0;
+
     
     renderer.Run();
     

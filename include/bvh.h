@@ -2,8 +2,8 @@
 
 #include "mesh.h"
 
-const int K = 16;
-const int ITER = 10;
+const int K = 8;
+const int ITER = 50;
 
 struct Primitive
 {
@@ -48,7 +48,8 @@ public:
 
 	class Shader* BoxShader;
 
-	BVH();
+	BVH() = default;
+	void Init();
 
 	void draw(class Shader* shader);
 	void drawCluster(class Shader* shader, Cluster* cluster, int depth);

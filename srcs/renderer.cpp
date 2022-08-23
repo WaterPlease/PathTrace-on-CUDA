@@ -8,6 +8,8 @@
 #include "model.h"
 #include "bvh.h"
 
+#include "pathtracer.cuh"
+
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/glm.hpp>
 
@@ -43,6 +45,8 @@ void Renderer::SetScreenSize(const glm::uvec2& size)
 {
     screenSize = size;
     camera->aspect = (float)screenSize.x / (float)screenSize.y;
+    camera->Screen_W = size.x;
+    camera->Screen_H = size.y;
 }
 
 void Renderer::CreateWindow()
@@ -92,20 +96,19 @@ void Renderer::Run()
     Models.push_back(model_gun);
     */
 
-    Model* sponza = new Model("C:\\Users\\kwonh\\Desktop\\study\\Graphics\\PathTrace_GPGPU\\resources\\models\\sponza\\Sponza.gltf");
-    sponza->translation = glm::vec3(0.f, 0.f, 0.f);
-    sponza->rotation = glm::vec4(0.f);
-    sponza->scale = 1.0f;
-    Models.push_back(sponza);
+    Model* CornellBox = new Model("C:\\Users\\kwonh\\Desktop\\study\\Graphics\\PathTrace_GPGPU\\resources\\models\\cornellbox-box.obj");
+    CornellBox->translation = glm::vec3(0.f, 0.f, 0.f);
+    CornellBox->rotation = glm::vec4(0.f);
+    CornellBox->scale = 20.0f;
+    Models.push_back(CornellBox);
 
-    Model* SciFiHelmet = new Model("C:\\Users\\kwonh\\Desktop\\study\\Graphics\\PathTrace_GPGPU\\resources\\models\\\helmet\\SciFiHelmet.gltf");
-    SciFiHelmet->translation = glm::vec3(0.f, 10.f, -30.f);
-    SciFiHelmet->rotation = glm::vec4(0.f);
-    SciFiHelmet->scale = 10.0f;
-    Models.push_back(SciFiHelmet);
+    Model* Bunny = new Model("C:\\Users\\kwonh\\Desktop\\study\\Graphics\\PathTrace_GPGPU\\resources\\models\\rock_01.obj");
+    Bunny->translation = glm::vec3(0.f, 4.f, -3.f);
+    Bunny->rotation = glm::vec4(0.f);
+    Bunny->scale = 0.1f;
+    Models.push_back(Bunny);
 
-
-    BVH bvh;
+    bvh.Init();
     for (auto model : Models)
     {
         bvh.AddModel(model);
@@ -125,7 +128,7 @@ void Renderer::Run()
     bvh.GenClusterMesh(bvh.rootCluster);
     std::cout << "Build BVH tree" << std::endl;
     bvh.rootBVH = bvh.GenBVHTree(bvh.rootCluster);
-    std::cout << "Pre process done" << std::endl;
+    std::cout << "Pre process done : Primitive CNT = "<< bvh.rootBVH->primCnt << std::endl;
 
     double currentTime = glfwGetTime();
     double lastTime = currentTime;
@@ -176,7 +179,7 @@ void Renderer::Run()
             bvh.BoxShader->setMat4("projection", camera->GetProjMat());
             bvh.drawBVHTree(bvh.rootBVH);
 
-            glEnable(GL_CULL_FACE);
+            //glEnable(GL_CULL_FACE);
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         }
 
@@ -240,6 +243,17 @@ void processInput(GLFWwindow* window)
         ignoreKeyB = false;
     }
 
+    static bool ignoreKeyP = false;
+    if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS && !ignoreKeyP)
+    {
+        PathTracer tracer;
+        tracer.Render(*(renderer.camera), &(renderer.bvh));
+        ignoreKeyP = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_P) == GLFW_RELEASE)
+    {
+        ignoreKeyP = false;
+    }
 
     if (renderer.bLMBPressed)
     {
@@ -282,5 +296,6 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
     Renderer::GetInstance().SetScreenSize(glm::uvec2(width, height));
+    std::cout << "Camera : " << Renderer::GetInstance().camera->Screen_W << " x " << Renderer::GetInstance().camera->Screen_H << std::endl;
     glViewport(0, 0, width, height);
 }

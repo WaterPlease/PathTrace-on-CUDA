@@ -5,6 +5,8 @@
 
 #include <glm/glm.hpp>
 
+#include "bvh.h"
+
 enum class RENDER_MODE
 {
 	RM_DEFAULT,
@@ -23,6 +25,7 @@ public:
 
 	GLFWwindow* window;
 	class Camera* camera;
+	BVH bvh;
 
 	float deltaTime;
 	float cameraMoveSpeed;

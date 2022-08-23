@@ -11,8 +11,12 @@ Simple path tracer renderer using CUDA.
 - Path tracer on CUDA
   - Diffuse reflection (Lambertian)
   - Non recursive implementation
-- BVH construction using clustering algorithm
-  - ![BVH](./Img/Doc/BVH.png)
+- BVH Acceleration
+  - BVH construction using clustering algorithm
+    - ![BVH](./Img/Doc/BVH.png)
+  
+  - Non recursive BVH traverse
+  
 - Simple scene viewer on OpenGL 4.6
 
 ### To be implemented later...

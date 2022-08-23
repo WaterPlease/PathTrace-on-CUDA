@@ -8,6 +8,14 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include "texture.h"
 
+struct MaterialOnCPU
+{
+    glm::vec3 emittance;
+    glm::vec3 albedo;
+    float metallic;
+    float roughness;
+};
+
 struct Vertex {
     // position
     glm::vec3 Position;
@@ -19,6 +27,11 @@ struct Vertex {
     glm::vec3 Tangent;
     // bitangent
     glm::vec3 Bitangent;
+
+    MaterialOnCPU mat;
+
+    float u;
+    float v;
 };
 
 class Mesh

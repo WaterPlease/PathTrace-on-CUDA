@@ -14,6 +14,9 @@ public:
 
 	glm::vec3 pos;
 
+	unsigned int Screen_W;
+	unsigned int Screen_H;
+
 	float fovy;
 	float aspect;
 	float near;

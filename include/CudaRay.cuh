@@ -1,5 +1,5 @@
-#pragma once
-
+#ifndef _CUDA_RAY_
+#define _CUDA_RAY_
 #include "CudaVector.cuh"
 
 class Ray
@@ -13,3 +13,5 @@ public:
 	vec3 org;
 	vec3 dir;
 };
+
+#endif

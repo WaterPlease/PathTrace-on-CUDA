@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _CUDA_VEC_
+#define _CUDA_VEC_
 
 #include <cuda_runtime.h>
 #include <math.h>
@@ -148,6 +149,35 @@ __host__ __device__ inline float MaxFrom(const vec3& v)
     return val;
 }
 
+
+__host__ __device__ inline vec3 max(const vec3& v1, const vec3& v2)
+{
+    return vec3(
+        (v1.x() > v2.x()) ? v1.x() : v2.x(),
+        (v1.y() > v2.y()) ? v1.y() : v2.y(),
+        (v1.z() > v2.z()) ? v1.z() : v2.z()
+    );
+}
+__host__ __device__ inline vec3 min(const vec3& v1, const vec3& v2)
+{
+    return vec3(
+        (v1.x() < v2.x()) ? v1.x() : v2.x(),
+        (v1.y() < v2.y()) ? v1.y() : v2.y(),
+        (v1.z() < v2.z()) ? v1.z() : v2.z()
+    );
+}
+
+__device__ inline float cudamax(const float& v1, const float& v2)
+{
+    return  (v1 > v2) ? v1 : v2;
+}
+__device__ inline float cudamin(const float& v1, const float& v2)
+{
+
+    return  (v1 > v2)?  v1 : v2;;
+}
+
+
 __host__ __device__ inline float vec3::dot(const vec3& v2) const
 {
     vec3 multVec = (*this) * v2;
@@ -174,3 +204,4 @@ __host__ __device__ inline vec3 saturate(const vec3& v)
     res[2] = (v.z() > 0.f) ? ((v.z() < 1.f) ? v.z() : 1.f) : 0.f;
     return res;
 }
+#endif
