@@ -25,7 +25,8 @@ public:
 
 	GLFWwindow* window;
 	class Camera* camera;
-	BVH bvh;
+	//BVH bvh;
+	SAHBVH bvh;
 
 	float deltaTime;
 	float cameraMoveSpeed;

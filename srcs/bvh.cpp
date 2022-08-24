@@ -200,12 +200,38 @@ void BVH::Cluster_Select_K(Cluster* cluster)
 	for (int i = 0; i < K; i++)
 	{
 		int rInt;
-		do
+		std::set<int> candidates;
+		for (int j = 0; j < min((unsigned long long)(2 * K), cluster->primitives.size() - i -j); j++)
 		{
-			rInt = uDist(gen);
-		} while (DupHash.find(rInt) != DupHash.end());
-		DupHash.insert(rInt);
-		int primID = cluster->primitives[rInt];
+			do
+			{
+				rInt = uDist(gen);
+			} while (DupHash.find(rInt) != DupHash.end() || candidates.find(rInt) != candidates.end());
+			candidates.insert(rInt);
+		}
+
+		float minDist = std::numeric_limits<float>::max();
+		int minDistClusterIdx = -1;
+
+		for (auto idx : candidates)
+		{
+			float dist = 0.f;
+			for (int j = 0; j <= i; j++)
+			{
+				dist += (cluster->Children[idx]->Centroid - cluster->Children[j]->Centroid).length();
+			}
+
+			if (dist < minDist)
+			{
+				minDist = dist;
+				minDistClusterIdx = idx;
+			}
+		}
+
+		candidates.clear();
+
+		DupHash.insert(minDistClusterIdx);
+		int primID = cluster->primitives[minDistClusterIdx];
 		cluster->Children[i]->Centroid = GetCentroid(primitives[primID]);
 	}
 }
@@ -395,4 +421,91 @@ BVHNode* BVH::IntoBVHNode(Cluster* cluster)
 inline bool BVH::isLeafCluster(Cluster* cluster)
 {
 	return !cluster->primitives.empty();
+}
+
+BVHNode* SAHBVH::GenBVHTree(Cluster* cluster)
+{
+	int axis = 0;
+	for (int i = 0; i < primitives.size(); i++)
+		cluster->primitives.push_back(i);
+	SplitNode(cluster, axis);
+
+	rootCluster = cluster;
+	rootBVH = ConvertToBVH(cluster);
+
+	return rootBVH;
+}
+
+void SAHBVH::SplitNode(Cluster* cluster, int axis)
+{
+	if (cluster->primitives.size() <= 4)
+	{
+		cluster->bLeaf = true;
+		return;
+	}
+	cluster->bLeaf = false;
+
+
+	std::vector<Primitive>& prims = primitives;
+	SAHBVH* _this = this;
+	sort(cluster->primitives.begin(), cluster->primitives.end(),
+		[&_this, &axis, &prims](const unsigned int A, const unsigned int B) {
+			return  _this->GetCentroid(prims[A])[axis] > _this->GetCentroid(prims[B])[axis];
+	});
+	int primNum = cluster->primitives.size();
+	GLfloat* CSA = new float[primNum];
+	
+	for (int i = 0; i < primNum; i++)
+	{
+		Primitive prim = prims[cluster->primitives[i]];
+		float area = glm::length(glm::cross((prim.v2.Position - prim.v1.Position), (prim.v3.Position - prim.v1.Position)));
+		if (i > 0)
+			CSA[i] = CSA[i - 1] + area;
+		else
+			CSA[i] = area;
+	}
+	float minValue = std::numeric_limits<float>::max();
+	int idx=0;
+	for (int i = 1; i < primNum; i++)
+	{
+		float fi = CSA[i - 1] * i + (CSA[primNum - 1] - CSA[i - 1]) * (primNum - i);
+		if (fi < minValue)
+		{
+			minValue = fi;
+			idx = i;
+		}
+	}
+	delete[] CSA;
+
+	cluster->Children[0] = new Cluster();
+	cluster->Children[1] = new Cluster();
+	for (int i = 0; i < idx; i++)
+	{
+		cluster->Children[0]->primitives.push_back(cluster->primitives[i]);
+	}
+	for (int i = idx; i < primNum; i++)
+	{
+		cluster->Children[1]->primitives.push_back(cluster->primitives[i]);
+	}
+	cluster->primitives.clear();
+
+	SplitNode(cluster->Children[0], (axis + 1) % 3);
+	SplitNode(cluster->Children[1], (axis + 1) % 3);
+}
+
+BVHNode* SAHBVH::ConvertToBVH(Cluster* cluster)
+{
+	if (cluster->bLeaf)
+		return IntoBVHNode(cluster);
+	BVHNode* node = new BVHNode;
+
+	node->Child[0] = ConvertToBVH(cluster->Children[0]);
+	node->Child[1] = ConvertToBVH(cluster->Children[1]);
+
+	node->bMin = glm::min(node->Child[0]->bMin, node->Child[1]->bMin);
+	node->bMax = glm::min(node->Child[0]->bMax, node->Child[1]->bMax);
+	node->Centroid = (node->bMin + node->bMax) * 0.5f;
+	node->primCnt = node->Child[0]->primCnt + node->Child[1]->primCnt;
+
+	return node;
 }

@@ -127,17 +127,19 @@ void PathTracer::Render(Camera& camera, BVH* bvh)
 	int NumLightSource = 0;
 
 	checkCudaErrors(cudaMallocManaged(&triangles, sizeof(Triangle) * NumTriangle));
-	checkCudaErrors(cudaMallocManaged(&lightSources, sizeof(Triangle) * MAX_NUM_LIGHT_SOURCE));
+	checkCudaErrors(cudaMallocManaged(&lightSources, sizeof(Triangle) * NumTriangle));
 	checkCudaErrors(cudaMallocManaged(&BVHTree, sizeof(CudaBVHNode) * NumTreeNode));
 
 	InitHittables<Triangle> << <1, 1 >> > (triangles, NumTriangle, 0);
-	InitHittables<Triangle> << <1, 1 >> > (lightSources, MAX_NUM_LIGHT_SOURCE, 0);
+	InitHittables<Triangle> << <1, 1 >> > (lightSources, NumTriangle, 0);
 	checkCudaErrors(cudaDeviceSynchronize());
 
 	for (int i = 0; i < NumTriangle; i++)
 	{
 		triangles[i].Copy(CudaPrims[i]);
-		if (CudaPrims[i].mat0.emittance.length() > EPS)
+		if (CudaPrims[i].mat0.emittance.length() > EPS ||
+			CudaPrims[i].mat1.emittance.length() > EPS ||
+			CudaPrims[i].mat2.emittance.length() > EPS)
 		{
 			std::cout << "ADD light" << std::endl;
 			lightSources[NumLightSource++].Copy(CudaPrims[i]);

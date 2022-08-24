@@ -10,12 +10,11 @@
 #include "CudaRay.cuh"
 #include "CudaPrimitive.cuh"
 
-#define MAX_NUM_LIGHT_SOURCE 8
 #define MAX_BOUNCE (8)
 #define RUSSIAN_ROULETTE_BOUNCE (4)
 #define PROB_STOP_BOUNCE (0.7f)
-#define NUM_MULTI_SAMPLE (8)
-#define NUM_SAMPLE (64)
+#define NUM_MULTI_SAMPLE (4)
+#define NUM_SAMPLE (4)
 #define PI (3.141592f)
 #define INV_PI (1.f/3.141592f)
 
@@ -164,9 +163,8 @@ __device__ Color GetLightColor(const vec3& position, const vec3& pointOnLight, T
     return color;
 }
 
-__device__ float GetLightPDF(const Ray& ray, Triangle& lightSource)
+__device__ float GetLightPDF(const Ray& ray, Triangle& lightSource, HitResult& hitResult)
 {
-    HitResult hitResult;
     if (lightSource.hit(ray, 0.f, 9999999.f, hitResult))
     {
         return 1.f / (lightSource.area) ;
@@ -185,13 +183,21 @@ __device__ float GetHemiSpherePDF(const Ray& ray, vec3 normal)
 __device__ float GetMISWeight(const Ray& ray, vec3 normal, Triangle* lightSources, int Nl)
 {
     float divisor = 0.f;
+    float minDist = 99999999.f;
+    float prob = 0.f;;
+    HitResult hitResult;
     for (int i = 0; i < Nl; i++)
     {
-        divisor += GetLightPDF(ray, lightSources[i]) * (1.f / (float)Nl);
+        divisor = GetLightPDF(ray, lightSources[i], hitResult);// *(1.f / (float)Nl);
+        float tmp = (hitResult.p - ray.org).length();
+        if (tmp < minDist)
+        {
+            minDist = tmp;
+            prob = divisor;
+        }
     }
-    divisor += GetHemiSpherePDF(ray, normal);
 
-    return 1.f / (divisor+EPS);
+    return prob * (1.f / (float)Nl);
 }
 
 __device__ Color GetColor_iter(const Ray& ray, Triangle* triangles, int Nt, CudaBVHNode* BVHTree, int Nb, Triangle* lights, int Nl, int Depth, curandState* s)
@@ -202,20 +208,20 @@ __device__ Color GetColor_iter(const Ray& ray, Triangle* triangles, int Nt, Cuda
     Color reflections[MAX_BOUNCE];
     Color emittances = Black;
     Color DirectLight[MAX_BOUNCE];
-    
-    Color SampledLights[MAX_NUM_LIGHT_SOURCE];
-    Ray   SampledRays[MAX_NUM_LIGHT_SOURCE];
+
+    Color diffuseColor;
+    Color specularColor;
 
     HitResult hitResult;
     Ray currentRay = ray;
     
     for (; Depth < MAX_BOUNCE; Depth++)
     {
+        diffuseColor = specularColor = Black;
+        DirectLight[Depth] = Black;
         if (RayCast(currentRay, triangles, Nt, BVHTree, Nb, hitResult))
         { // Direct lighting
-
-            DirectLight[Depth] = Black;
-            int NUM_LIGHT_SAMPLE_SOURCE = 1;
+            int NUM_LIGHT_SAMPLE_SOURCE = 4;
             if (Nl > 0 && NUM_LIGHT_SAMPLE_SOURCE > 0)
             {
                 for (int i = 0; i < NUM_LIGHT_SAMPLE_SOURCE; i++)
@@ -232,7 +238,7 @@ __device__ Color GetColor_iter(const Ray& ray, Triangle* triangles, int Nt, Cuda
                     float cosA = dot(lights[lightIdx].normal, Normalize(hitResult.p - SampledPoint));
                     cosA = (cosA < 0.f) ? 0.f : cosA;
 
-                    DirectLight[Depth] += INV_PI * hitResult.mat.albedo * cosW * cosW * lightColor / ((hitResult.p - SampledPoint).squared_length() * pdfLight);
+                    DirectLight[Depth] += INV_PI * hitResult.mat.albedo * cosW * cosW * lightColor / ((hitResult.p - SampledPoint).squared_length() * (pdfLight));
                 }
                 DirectLight[Depth] /= (float)NUM_LIGHT_SAMPLE_SOURCE;
             }
@@ -240,11 +246,22 @@ __device__ Color GetColor_iter(const Ray& ray, Triangle* triangles, int Nt, Cuda
                 emittances = hitResult.mat.emittance;
 
             vec3 reflectedRay;
-            float prob = SampleHemisphere(s, reflectedRay, hitResult.normal, hitResult.tangent, hitResult.bitangent);
-            currentRay = Ray(hitResult.p + hitResult.normal * 0.001, reflectedRay);
-            float cosW = dot(hitResult.normal, reflectedRay);
+            // sample specular reflection
+            if (curand_uniform(s) < hitResult.mat.specular)
+            {
+                reflectedRay = hitResult.ray.dir - 2.0f * dot(hitResult.normal, hitResult.ray.dir) * hitResult.normal;
+                currentRay = Ray(hitResult.p + hitResult.normal * 0.001, reflectedRay);
+                reflections[Depth] = Color(1.0f, 1.0f, 1.0f);
+            }
+            else // sample diffuse reflection
+            {
+                float prob = SampleHemisphere(s, reflectedRay, hitResult.normal, hitResult.tangent, hitResult.bitangent);
+                currentRay = Ray(hitResult.p + hitResult.normal * 0.001, reflectedRay);
+                float cosW = dot(hitResult.normal, reflectedRay);
 
-            reflections[Depth] = INV_PI * hitResult.mat.albedo * cosW / prob;
+                reflections[Depth] = INV_PI * hitResult.mat.albedo * cosW / prob;
+            }
+            reflections[Depth];
 
 
             if (Depth >= RUSSIAN_ROULETTE_BOUNCE)
@@ -276,59 +293,7 @@ __device__ Color GetColor_iter(const Ray& ray, Triangle* triangles, int Nt, Cuda
     {
         color = color * reflections[Depth] + DirectLight[Depth];
     }
-    return color + emittances;// color + emittances;
-    
-
-    /*
-    * 
-    * LEGACY
-    * 
-    Color emittances_[MAX_BOUNCE];
-    for (; Depth < MAX_BOUNCE; Depth++)
-    {
-        if (RayCast(currentRay, triangles, Nt, BVHTree, Nb, hitResult))
-        {
-            emittances_[Depth] = hitResult.mat.emittance;
-            vec3 reflectedRay;
-            float prob = SampleHemisphere(s, reflectedRay, hitResult.normal, hitResult.tangent, hitResult.bitangent);
-            currentRay = Ray(hitResult.p + hitResult.normal * 0.001, reflectedRay);
-            float cosW = dot(hitResult.normal, reflectedRay);
-
-            reflections[Depth] = INV_PI * hitResult.mat.albedo * cosW / prob;
-
-            if (Depth >= RUSSIAN_ROULETTE_BOUNCE)
-            {
-                float probToStop = MaxFrom(reflections[Depth-1]);
-                probToStop = (probToStop < PROB_STOP_BOUNCE)?   probToStop : PROB_STOP_BOUNCE;
-                float sample = curand_uniform(s);
-                if (sample < probToStop)
-                {
-                    reflections[Depth] *= (1.f / probToStop);
-                }
-                else
-                {
-                    Depth += 1;
-                    break;
-                }
-            }
-        }
-        else
-        {
-            reflections[Depth] = Black;
-            emittances_[Depth] =  Black;
-            //emittances[Depth] = vec3(1.f, 1.f, 1.f);// *dot(currentRay.dir, vec3(0.f, 1.f, 0.f));
-            Depth+=1;
-            break;
-        }
-    }
-    Depth -= 1;
-
-    for (; Depth >= 0; --Depth)
-    {
-        color = color * reflections[Depth] + emittances_[Depth];
-    }
-    return color;
-    */
+    return color + emittances;
 }
 __host__ __device__ Color ACESFilm(Color x)
 {

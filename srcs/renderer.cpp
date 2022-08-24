@@ -24,7 +24,7 @@ Renderer::Renderer()
 
     camera = new Camera();
     camera->SetRotation(glm::vec3(0.f,90.f,0.f));
-    camera->pos = glm::vec3(0.f, 10.f, 40.0f);
+    camera->pos = glm::vec3(0.f, 20.f, 60.0f);
     cameraMoveSpeed = 100.f;
     cameraRotSpeed = 0.1f;
 
@@ -102,11 +102,11 @@ void Renderer::Run()
     CornellBox->scale = 20.0f;
     Models.push_back(CornellBox);
 
-    Model* Bunny = new Model("C:\\Users\\kwonh\\Desktop\\study\\Graphics\\PathTrace_GPGPU\\resources\\models\\rock_01.obj");
-    Bunny->translation = glm::vec3(0.f, 4.f, -3.f);
+    Model* Bunny = new Model("C:\\Users\\kwonh\\Desktop\\study\\Graphics\\PathTrace_GPGPU\\resources\\models\\bunny.obj");
+    Bunny->translation = glm::vec3(5.f, -5.f, 0.f);
     Bunny->rotation = glm::vec4(0.f);
-    Bunny->scale = 0.1f;
-    //Models.push_back(Bunny);
+    Bunny->scale = 130.f;
+    Models.push_back(Bunny);
 
     bvh.Init();
     for (auto model : Models)
@@ -114,21 +114,11 @@ void Renderer::Run()
         bvh.AddModel(model);
     }
     std::cout << "Build BVH" << std::endl;
-    bvh.rootCluster = new Cluster();
-    std::cout << "insert primitives into root cluster" << std::endl;
-    int BVHN = bvh.primitives.size();
-    for (int i = 0; i < BVHN; i++)
-    {
-        bvh.rootCluster->primitives.push_back(i);
-    }
-    std::cout << "RUN K-Means" << std::endl;
-    //bvh.Cluster_K_MEAS(bvh.rootCluster);
-    bvh.Cluster_K_MEAS_Recursive(bvh.rootCluster,5);
+    bvh.GenBVHTree(new Cluster());
     std::cout << "Build ClusterMesh" << std::endl;
     bvh.GenClusterMesh(bvh.rootCluster);
-    std::cout << "Build BVH tree" << std::endl;
-    bvh.rootBVH = bvh.GenBVHTree(bvh.rootCluster);
     std::cout << "Pre process done : Primitive CNT = "<< bvh.rootBVH->primCnt << std::endl;
+    
 
     double currentTime = glfwGetTime();
     double lastTime = currentTime;
