@@ -12,8 +12,8 @@
 
 #include "pathtracer.cuh"
 
-const unsigned int SCR_WIDTH =  1920;
-const unsigned int SCR_HEIGHT = 1080;
+const unsigned int SCR_WIDTH =  512;
+const unsigned int SCR_HEIGHT = 512;
 
 void GLAPIENTRY
 MessageCallback(GLenum source,

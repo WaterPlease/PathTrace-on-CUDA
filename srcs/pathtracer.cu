@@ -39,7 +39,7 @@ __device__ vec3 GetPixelDirection(int px, int py, curandState *s)
 	return direction;
 }
 
-__global__ void StartRender(int W, int H, Color* image, Triangle* triangles, int Nt, CudaBVHNode* BVHTree, int Nb, int SampleIDX)
+__global__ void StartRender(int W, int H, Color* image, Triangle* triangles, int Nt, CudaBVHNode* BVHTree, int Nb, Triangle* lights, int Nl, int SampleIDX)
 {
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
 	int stride = blockDim.x * gridDim.x;
@@ -54,7 +54,7 @@ __global__ void StartRender(int W, int H, Color* image, Triangle* triangles, int
 		Color pixelColor(0.f,0.f,0.f);
 		for (int i = 0; i < NUM_SAMPLE; i++)
 		{
-			pixelColor += GetColor_iter(Ray(CameraPos, direction), triangles, Nt, BVHTree, Nb, 0, &s);
+			pixelColor += GetColor_iter(Ray(CameraPos, direction), triangles, Nt, BVHTree, Nb, lights, Nl, 0, &s);
 		}
 		image[offset] += pixelColor / (float)(NUM_SAMPLE);
 	}
@@ -123,14 +123,26 @@ void PathTracer::Render(Camera& camera, BVH* bvh)
 	CudaBVHNode* BVHTree;
 	int NumTreeNode = CudaBVH.size();
 
+	Triangle* lightSources;
+	int NumLightSource = 0;
+
 	checkCudaErrors(cudaMallocManaged(&triangles, sizeof(Triangle) * NumTriangle));
+	checkCudaErrors(cudaMallocManaged(&lightSources, sizeof(Triangle) * MAX_NUM_LIGHT_SOURCE));
 	checkCudaErrors(cudaMallocManaged(&BVHTree, sizeof(CudaBVHNode) * NumTreeNode));
 
 	InitHittables<Triangle> << <1, 1 >> > (triangles, NumTriangle, 0);
+	InitHittables<Triangle> << <1, 1 >> > (lightSources, MAX_NUM_LIGHT_SOURCE, 0);
 	checkCudaErrors(cudaDeviceSynchronize());
 
 	for (int i = 0; i < NumTriangle; i++)
+	{
 		triangles[i].Copy(CudaPrims[i]);
+		if (CudaPrims[i].mat0.emittance.length() > EPS)
+		{
+			std::cout << "ADD light" << std::endl;
+			lightSources[NumLightSource++].Copy(CudaPrims[i]);
+		}
+	}
 	checkCudaErrors(cudaDeviceSynchronize());
 
 	for (int i = 0; i < NumTreeNode; i++)
@@ -188,7 +200,7 @@ void PathTracer::Render(Camera& camera, BVH* bvh)
 	for (int i = 0; i < NUM_MULTI_SAMPLE; i++)
 	{
 		//ImageTest<<<numBlock,threadPerBlock>>>(W, H, rawData);
-		StartRender << <gridDim, blockDim >> > (W, H, rawData, triangles, NumTriangle, BVHTree, NumTreeNode, i);
+		StartRender << <gridDim, blockDim >> > (W, H, rawData, triangles, NumTriangle, BVHTree, NumTreeNode, lightSources, NumLightSource, i);
 		checkCudaErrors(cudaGetLastError());
 		checkCudaErrors(cudaDeviceSynchronize());
 		checkCudaErrors(cudaGetLastError());

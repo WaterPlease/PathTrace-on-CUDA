@@ -121,7 +121,10 @@ public:
        hitResult.v = (1.f - v - u) * v0 + v * v1 + u * v2;
 
        hitResult.p = ray.at(hitResult.t);
-       hitResult.SetNormal(normal);
+       //hitResult.SetNormal(normal);
+       hitResult.SetNormal((1.f - v - u) * N0 + v * N1 + u * N2);
+       hitResult.tangent = (1.f - v - u) * T0 + v * T1 + u * T2;
+       hitResult.bitangent=(1.f - v - u) * B0 + v * B1 + u * B2;
        hitResult.mat.albedo = mat0.albedo;
        hitResult.mat.emittance = mat0.emittance;
 
@@ -173,6 +176,8 @@ public:
         E2 = V2 - V0;
 
         normal = Normalize(cross(E1, E2));
+        
+        area = cross(E1, E2).length()*0.5f;
 
         u0 = _u0;
         u1 = _u1;
@@ -200,6 +205,8 @@ public:
     Material mat0;
     Material mat1;
     Material mat2;
+
+    float area;
 };
 
 struct CudaBVHNode
