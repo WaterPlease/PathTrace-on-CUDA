@@ -38,9 +38,31 @@ __device__ vec3 GetPixelDirection(int px, int py, curandState *s)
 
 	return direction;
 }
-
+extern __shared__ float array[];
 __global__ void StartRender(int W, int H, Color* image, Triangle* triangles, int Nt, CudaBVHNode* BVHTree, int Nb, Triangle* lights, int Nl, int SampleIDX)
 {
+	/*
+	Triangle* blockTriangles = new Triangle[Nt];// (Triangle*)array;
+	Triangle* blocklights = new Triangle[Nl];// (Triangle*)&blockTriangles[Nt];
+	CudaBVHNode* blockBVHNode = new CudaBVHNode[Nb];// (CudaBVHNode*)&blocklights[Nl];
+	if (threadIdx.x == 0)
+	{
+		for (int i = 0; i < Nt; i++)
+		{
+			blockTriangles[i].Copy(triangles[i]);
+		}
+		for (int i = 0; i < Nl; i++)
+		{
+			blocklights[i].Copy(lights[i]);
+		}
+		for (int i = 0; i < Nb; i++)
+		{
+			blockBVHNode[i] = BVHTree[i];
+		}
+	}
+	__syncthreads();
+	*/
+
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
 	int stride = blockDim.x * gridDim.x;
 	curandState s;
@@ -180,7 +202,7 @@ void PathTracer::Render(Camera& camera, BVH* bvh)
 
 
 	size_t stackSize;
-	//checkCudaErrors(cudaThreadSetLimit(cudaLimitStackSize, 1024 * 128));
+	checkCudaErrors(cudaThreadSetLimit(cudaLimitStackSize, 1024));
 	checkCudaErrors(cudaDeviceSynchronize());
 	checkCudaErrors(cudaThreadGetLimit(&stackSize, cudaLimitStackSize));
 	checkCudaErrors(cudaDeviceSynchronize());

@@ -106,7 +106,7 @@ void Renderer::Run()
     Bunny->translation = glm::vec3(5.f, -5.f, 0.f);
     Bunny->rotation = glm::vec4(0.f);
     Bunny->scale = 130.f;
-    Models.push_back(Bunny);
+    //Models.push_back(Bunny);
 
     bvh.Init();
     for (auto model : Models)

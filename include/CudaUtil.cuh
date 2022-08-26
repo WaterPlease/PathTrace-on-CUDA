@@ -10,11 +10,11 @@
 #include "CudaRay.cuh"
 #include "CudaPrimitive.cuh"
 
-#define MAX_BOUNCE (8)
+#define MAX_BOUNCE (6)
 #define RUSSIAN_ROULETTE_BOUNCE (4)
-#define PROB_STOP_BOUNCE (0.7f)
-#define NUM_MULTI_SAMPLE (4)
-#define NUM_SAMPLE (4)
+#define PROB_STOP_BOUNCE (0.5f)
+#define NUM_MULTI_SAMPLE (8)
+#define NUM_SAMPLE (16)
 #define PI (3.141592f)
 #define INV_PI (1.f/3.141592f)
 
@@ -49,7 +49,7 @@ __device__ float SampleHemisphere(curandState* state, vec3& direction, const vec
     float z = cosTheta;
 
     //To world space
-    direction = x * tangent + y * bitangent + z * normal;
+    direction = Normalize(x * tangent + y * bitangent + z * normal);
 
     return prob;
 }
@@ -63,7 +63,7 @@ __device__ float SamplePrimitive(curandState* state, vec3& point, const Triangle
 
     point = (1 - r1) * prim.V0 + r1 * (1 - r2) * prim.V1 + r1 * r2 * prim.V2;
 
-    return 1.f/(prim.area);
+    return 1.f / (prim.area);
 }
 
 __device__ void curandInitWithThreadID(curandState* s)
@@ -244,7 +244,6 @@ __device__ Color GetColor_iter(const Ray& ray, Triangle* triangles, int Nt, Cuda
             }
             if (Depth == 0)
                 emittances = hitResult.mat.emittance;
-
             vec3 reflectedRay;
             // sample specular reflection
             if (curand_uniform(s) < hitResult.mat.specular)
@@ -262,7 +261,6 @@ __device__ Color GetColor_iter(const Ray& ray, Triangle* triangles, int Nt, Cuda
                 reflections[Depth] = INV_PI * hitResult.mat.albedo * cosW / prob;
             }
             reflections[Depth];
-
 
             if (Depth >= RUSSIAN_ROULETTE_BOUNCE)
             {

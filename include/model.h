@@ -164,11 +164,13 @@ private:
             aiColor3D emissive(0.f, 0.f, 0.f);
             ai_real metallicFactor;
             ai_real roughnessFactor;
+            ai_real specularFactor;
 
             material->Get(AI_MATKEY_COLOR_DIFFUSE, basecolor);
             material->Get(AI_MATKEY_COLOR_EMISSIVE, emissive);
             material->Get(AI_MATKEY_METALLIC_FACTOR, metallicFactor);
             material->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughnessFactor);
+            material->Get(AI_MATKEY_SHININESS, specularFactor);
 
             vertex.mat.albedo.r = basecolor.r;
             vertex.mat.albedo.g = basecolor.g;
@@ -180,6 +182,7 @@ private:
 
             vertex.mat.metallic = metallicFactor;
             vertex.mat.roughness = roughnessFactor;
+            vertex.mat.specular = specularFactor;
 
             vertices.push_back(vertex);
         }

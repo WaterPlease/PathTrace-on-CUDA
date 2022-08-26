@@ -9,18 +9,43 @@ Simple path tracer renderer using CUDA.
 # Features
 
 - Path tracer on CUDA
-  - Diffuse reflection (Lambertian)
+  - BRDF
+    - Diffuse reflection (Lambertian)
+    - Specular reflection
   - Non recursive implementation
+  - Monte Carlo integration
+    - NEE
 - BVH Acceleration
-  - BVH construction using clustering algorithm
+  - BVH construction using SAH
+  - [DEPRECATED] BVH construction using clustering algorithm
     - ![BVH](./Img/Doc/BVH.png)
   
   - Non recursive BVH traverse
   
 - Simple scene viewer on OpenGL 4.6
+  - For now,  rendering cluster of polygons is all.
+
 
 ### To be implemented later...
 
-- BVH travese on GPU
+- Refraction,...
+- optimizations.,
+  - metropolis light transformation?
+
 - Scene loading and exportation using json file.
 
+
+
+# Rendered images...
+
+1. Image for comparision of image with NEE and one without. (16spp)
+
+![](./Img/Render/16spp_woNEE.png) ![](./Img/Render/16spp_NEE.png)
+
+2. Diffuse room
+
+![](./Img/Render/DiffuseRoom_MS8x2048spp_13min.png)
+
+3. Mirror bunny
+
+![][./Img/Render/bunny.png]![][./Img/Render//Render/bunny2.png]

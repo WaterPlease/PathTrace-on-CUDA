@@ -17,7 +17,8 @@ struct Material
     Color emittance;
     Color albedo;
     float specular;
-    float glossiness;
+    float roughness;
+    float metallic;
 };
 
 struct HitResult
@@ -73,7 +74,7 @@ __global__ void InitHittables(T* hittables, int Cnt, int offset=0)
     return;
 }
 
-class Triangle : public Hittable
+class alignas(8) Triangle : public Hittable
 {
 public:
     /*
@@ -122,18 +123,19 @@ public:
 
        hitResult.p = ray.at(hitResult.t);
        //hitResult.SetNormal(normal);
-       hitResult.SetNormal((1.f - v - u) * N0 + v * N1 + u * N2);
-       hitResult.tangent = (1.f - v - u) * T0 + v * T1 + u * T2;
-       hitResult.bitangent=(1.f - v - u) * B0 + v * B1 + u * B2;
+       hitResult.SetNormal(Normalize((1.f - v - u) * N0 + v * N1 + u * N2));
+       hitResult.tangent = Normalize((1.f - v - u) * T0 + v * T1 + u * T2);
+       hitResult.bitangent=Normalize((1.f - v - u) * B0 + v * B1 + u * B2);
        hitResult.mat.albedo = mat0.albedo;
        hitResult.mat.emittance = mat0.emittance;
        hitResult.mat.specular = mat0.specular;
-       hitResult.mat.glossiness = mat0.glossiness;
+       hitResult.mat.metallic = mat0.metallic;
+       hitResult.mat.roughness = mat0.roughness;
 
        return true;
    }
 
-    __host__ void Copy(const Triangle& tr)
+    __host__ __device__ void Copy(const Triangle& tr)
     {
         Copy(
             tr.V0, tr.V1, tr.V2,
@@ -145,7 +147,7 @@ public:
             tr.v0, tr.v1, tr.v2 );
     }
 
-    __host__ void Copy(
+    __host__ __device__ void Copy(
         vec3 _V0, vec3 _V1, vec3 _V2,
         vec3 _T0, vec3 _T1, vec3 _T2,
         vec3 _B0, vec3 _B1, vec3 _B2,
@@ -211,7 +213,7 @@ public:
     float area;
 };
 
-struct CudaBVHNode
+struct alignas(8) CudaBVHNode
 {
     vec3 bMin;
     vec3 bMax;
@@ -316,18 +318,21 @@ __host__ void LoadFromBVH(BVH* bvh)
 
                 tr.mat0.albedo = ConvertToCudaVec(prim.v1.mat.albedo);
                 tr.mat0.emittance = ConvertToCudaVec(prim.v1.mat.emittance);
-                tr.mat0.specular = prim.v1.mat.metallic;
-                tr.mat0.glossiness = prim.v1.mat.roughness;
+                tr.mat0.specular = prim.v1.mat.specular;
+                tr.mat0.roughness = prim.v1.mat.roughness;
+                tr.mat0.metallic = prim.v1.mat.metallic;
 
                 tr.mat1.albedo = ConvertToCudaVec(prim.v2.mat.albedo);
                 tr.mat1.emittance = ConvertToCudaVec(prim.v2.mat.emittance);
-                tr.mat1.specular = prim.v2.mat.metallic;
-                tr.mat1.glossiness = prim.v2.mat.roughness;
+                tr.mat1.specular = prim.v2.mat.specular;
+                tr.mat1.roughness = prim.v2.mat.roughness;
+                tr.mat1.metallic = prim.v2.mat.metallic;
 
                 tr.mat2.albedo = ConvertToCudaVec(prim.v3.mat.albedo);
                 tr.mat2.emittance = ConvertToCudaVec(prim.v3.mat.emittance);
-                tr.mat2.specular = prim.v3.mat.metallic;
-                tr.mat2.glossiness = prim.v3.mat.roughness;
+                tr.mat2.specular = prim.v3.mat.specular;
+                tr.mat2.roughness = prim.v3.mat.roughness;
+                tr.mat2.metallic = prim.v3.mat.metallic;
 
                 CudaPrims.push_back(tr);
             }
