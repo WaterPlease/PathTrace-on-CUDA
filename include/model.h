@@ -157,20 +157,33 @@ private:
                 vertex.Bitangent = vector;
             }
             else
+            {
                 vertex.TexCoords = glm::vec2(0.0f, 0.0f);
+                glm::vec3 v2,v3;
+
+                if (std::abs(vertex.Normal.x) > std::abs(vertex.Normal.y))
+                    v2 = glm::normalize(glm::vec3(-vertex.Normal.z, 0, vertex.Normal.x));
+                else
+                    v2 = glm::normalize(glm::vec3(0, vertex.Normal.z, -vertex.Normal.y));
+                v3 = glm::cross(vertex.Normal, v2);
+                vertex.Tangent = v2;
+                vertex.Bitangent = v3;
+            }
 
             aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
             aiColor3D basecolor(0.f, 0.f, 0.f);
             aiColor3D emissive(0.f, 0.f, 0.f);
-            ai_real metallicFactor;
-            ai_real roughnessFactor;
-            ai_real specularFactor;
+            aiColor3D specular(0.f, 0.f, 0.f);
+            ai_real metallic;
+            ai_real roughness;
+            ai_real opacity;
 
             material->Get(AI_MATKEY_COLOR_DIFFUSE, basecolor);
             material->Get(AI_MATKEY_COLOR_EMISSIVE, emissive);
-            material->Get(AI_MATKEY_METALLIC_FACTOR, metallicFactor);
-            material->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughnessFactor);
-            material->Get(AI_MATKEY_SHININESS, specularFactor);
+            material->Get(AI_MATKEY_COLOR_SPECULAR, specular);
+            material->Get(AI_MATKEY_METALLIC_FACTOR, metallic);
+            material->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughness);
+            material->Get(AI_MATKEY_OPACITY, opacity);
 
             vertex.mat.albedo.r = basecolor.r;
             vertex.mat.albedo.g = basecolor.g;
@@ -180,9 +193,9 @@ private:
             vertex.mat.emittance.g = emissive.g;
             vertex.mat.emittance.b = emissive.b;
 
-            vertex.mat.metallic = metallicFactor;
-            vertex.mat.roughness = roughnessFactor;
-            vertex.mat.specular = specularFactor;
+            vertex.mat.metallic = metallic;
+            vertex.mat.roughness = roughness;
+            vertex.mat.opacity = opacity;
 
             vertices.push_back(vertex);
         }

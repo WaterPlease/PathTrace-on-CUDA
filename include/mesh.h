@@ -12,7 +12,8 @@ struct MaterialOnCPU
 {
     glm::vec3 emittance;
     glm::vec3 albedo;
-    float specular;
+    glm::vec3 specular;
+    float opacity;
     float metallic;
     float roughness;
 };

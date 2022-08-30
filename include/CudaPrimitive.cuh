@@ -16,7 +16,8 @@ struct Material
 {
     Color emittance;
     Color albedo;
-    float specular;
+    Color specular;
+    float opacity;
     float roughness;
     float metallic;
 };
@@ -318,21 +319,24 @@ __host__ void LoadFromBVH(BVH* bvh)
 
                 tr.mat0.albedo = ConvertToCudaVec(prim.v1.mat.albedo);
                 tr.mat0.emittance = ConvertToCudaVec(prim.v1.mat.emittance);
-                tr.mat0.specular = prim.v1.mat.specular;
+                tr.mat0.specular = ConvertToCudaVec(prim.v1.mat.specular);
                 tr.mat0.roughness = prim.v1.mat.roughness;
                 tr.mat0.metallic = prim.v1.mat.metallic;
+                tr.mat0.opacity = prim.v1.mat.opacity;
 
                 tr.mat1.albedo = ConvertToCudaVec(prim.v2.mat.albedo);
                 tr.mat1.emittance = ConvertToCudaVec(prim.v2.mat.emittance);
-                tr.mat1.specular = prim.v2.mat.specular;
+                tr.mat1.specular = ConvertToCudaVec(prim.v2.mat.specular);
                 tr.mat1.roughness = prim.v2.mat.roughness;
                 tr.mat1.metallic = prim.v2.mat.metallic;
+                tr.mat1.opacity = prim.v2.mat.opacity;
 
                 tr.mat2.albedo = ConvertToCudaVec(prim.v3.mat.albedo);
                 tr.mat2.emittance = ConvertToCudaVec(prim.v3.mat.emittance);
-                tr.mat2.specular = prim.v3.mat.specular;
+                tr.mat2.specular = ConvertToCudaVec(prim.v3.mat.specular);
                 tr.mat2.roughness = prim.v3.mat.roughness;
                 tr.mat2.metallic = prim.v3.mat.metallic;
+                tr.mat2.opacity = prim.v3.mat.opacity;
 
                 CudaPrims.push_back(tr);
             }

@@ -34,7 +34,13 @@ Simple path tracer renderer using CUDA.
 
 - Scene loading and exportation using json file.
 
+# License
 
+This project contains code from following open source software
+
+1. **[yocto-gl](https://github.com/xelatihy/yocto-gl)**
+   1. License : MIT license
+   2. Download Site : [xelatihy/yocto-gl: Yocto/GL: Tiny C++ Libraries for Data-Driven Physically-based Graphics (github.com)](https://github.com/xelatihy/yocto-gl)
 
 # Rendered images...
 

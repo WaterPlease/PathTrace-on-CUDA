@@ -65,10 +65,10 @@ __global__ void StartRender(int W, int H, Color* image, Triangle* triangles, int
 
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
 	int stride = blockDim.x * gridDim.x;
-	curandState s;
 	for (int offset = index; offset < (W*H); offset += (stride))
 	{
-		curand_init(offset + SampleIDX*W*H, 0, 0, &s);
+		curandState s;
+		curand_init((offset + SampleIDX*W*H), clock64(), 0, &s);
 		int py = offset / W;
 		int px = offset % W;
 		vec3 direction = GetPixelDirection(px, py, &s);
@@ -172,6 +172,7 @@ void PathTracer::Render(Camera& camera, BVH* bvh)
 	for (int i = 0; i < NumTreeNode; i++)
 	{
 		BVHTree[i] = CudaBVH[i];
+		//std::cout << "BVH[" << i << "] Delta=(" << BVHTree[i].bMax[0] - BVHTree[i].bMin[0] << ", " << BVHTree[i].bMax[1] - BVHTree[i].bMin[1] << ", " << BVHTree[i].bMax[2] - BVHTree[i].bMin[2] << ")" << std::endl;
 	}
 	checkCudaErrors(cudaDeviceSynchronize());
 

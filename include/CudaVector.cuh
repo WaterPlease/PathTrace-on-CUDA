@@ -76,10 +76,6 @@ __host__ __device__ inline vec3 operator*(float t, const vec3& v) {
     return vec3(t * v.e[0], t * v.e[1], t * v.e[2]);
 }
 
-__host__ __device__ inline vec3 operator+(const vec3& v, float t) {
-    return vec3(t + v.e[0], t + v.e[1], t + v.e[2]);
-}
-
 __host__ __device__ inline vec3 operator/(vec3 v, float t) {
     return vec3(v.e[0] / t, v.e[1] / t, v.e[2] / t);
 }
@@ -88,6 +84,21 @@ __host__ __device__ inline vec3 operator*(const vec3& v, float t) {
     return vec3(t * v.e[0], t * v.e[1], t * v.e[2]);
 }
 
+__host__ __device__ inline vec3 operator+(const vec3& v, float t) {
+    return vec3(t + v.e[0], t + v.e[1], t + v.e[2]);
+}
+
+__host__ __device__ inline vec3 operator+(float t, const vec3& v) {
+    return vec3(t + v.e[0], t + v.e[1], t + v.e[2]);
+}
+
+__host__ __device__ inline vec3 operator-(const vec3& v, float t) {
+    return vec3(v.e[0] - t, v.e[1] - t, v.e[2] - t);
+}
+
+__host__ __device__ inline vec3 operator-(float t, const vec3& v) {
+    return vec3(t - v.e[0], t - v.e[1], t - v.e[2]);
+}
 __host__ __device__ inline float dot(const vec3& v1, const vec3& v2) {
     return v1.e[0] * v2.e[0] + v1.e[1] * v2.e[1] + v1.e[2] * v2.e[2];
 }
@@ -148,7 +159,12 @@ __host__ __device__ inline float MaxFrom(const vec3& v)
     val       = (val   > v.z()) ? val   : v.z();
     return val;
 }
-
+__host__ __device__ inline float MinFrom(const vec3& v)
+{
+    float val = (v.x() < v.y()) ? v.x() : v.y();
+    val = (val < v.z()) ? val : v.z();
+    return val;
+}
 
 __host__ __device__ inline vec3 max(const vec3& v1, const vec3& v2)
 {
@@ -167,6 +183,35 @@ __host__ __device__ inline vec3 min(const vec3& v1, const vec3& v2)
     );
 }
 
+__host__ __device__ inline vec3 max(const vec3& v1, float a)
+{
+    return vec3(
+        (v1.x() > a) ? v1.x() : a,
+        (v1.y() > a) ? v1.y() : a,
+        (v1.z() > a) ? v1.z() : a
+    );
+}
+__host__ __device__ inline vec3 max(float a, const vec3& v1)
+{
+    return max(v1, a);
+}
+
+__host__ __device__ inline vec3 min(const vec3& v1, float a)
+{
+    return vec3(
+        (v1.x() < a) ? v1.x() : a,
+        (v1.y() < a) ? v1.y() : a,
+        (v1.z() < a) ? v1.z() : a
+    );
+}
+__host__ __device__ inline vec3 min(float a, const vec3& v1)
+{
+    return min(v1, a);
+}
+__host__ __device__ inline vec3 clamp(const vec3& v1, float minVal, float maxVal)
+{
+    return min(max(v1, minVal),maxVal);
+}
 __device__ inline float cudamax(const float& v1, const float& v2)
 {
     return  (v1 > v2) ? v1 : v2;
@@ -174,9 +219,25 @@ __device__ inline float cudamax(const float& v1, const float& v2)
 __device__ inline float cudamin(const float& v1, const float& v2)
 {
 
-    return  (v1 > v2)?  v1 : v2;;
+    return  (v1 < v2)?  v1 : v2;
 }
 
+__device__ inline float clamp(const float& v1, float minVal, float maxVal)
+{
+    return cudamin(cudamax(v1, minVal), maxVal);
+}
+
+__device__ inline vec3 sqrtf(const vec3& v1)
+{
+
+    return  vec3(sqrtf(v1.x()), sqrtf(v1.y()), sqrtf(v1.z()));
+}
+
+__device__ inline vec3 pow(const vec3& base,float expoenent)
+{
+
+    return  vec3(powf(base.x(), expoenent), powf(base.y(), expoenent), powf(base.z(), expoenent));
+}
 
 __host__ __device__ inline float vec3::dot(const vec3& v2) const
 {

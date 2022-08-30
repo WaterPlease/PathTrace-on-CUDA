@@ -392,7 +392,7 @@ BVHNode* BVH::GenBVHTree(Cluster* cluster)
 BVHNode* BVH::IntoBVHNode(Cluster* cluster)
 {
 	glm::vec3 bbMin = glm::vec3(std::numeric_limits<float>::max());
-	glm::vec3 bbMax = glm::vec3(-std::numeric_limits<float>::max());
+	glm::vec3 bbMax = glm::vec3(std::numeric_limits<float>::lowest());
 	glm::vec3 Centroid(0.f);
 	GLuint primCnt = cluster->primitives.size();
 
@@ -503,7 +503,7 @@ BVHNode* SAHBVH::ConvertToBVH(Cluster* cluster)
 	node->Child[1] = ConvertToBVH(cluster->Children[1]);
 
 	node->bMin = glm::min(node->Child[0]->bMin, node->Child[1]->bMin);
-	node->bMax = glm::min(node->Child[0]->bMax, node->Child[1]->bMax);
+	node->bMax = glm::max(node->Child[0]->bMax, node->Child[1]->bMax);
 	node->Centroid = (node->bMin + node->bMax) * 0.5f;
 	node->primCnt = node->Child[0]->primCnt + node->Child[1]->primCnt;
 

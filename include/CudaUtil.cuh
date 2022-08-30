@@ -10,15 +10,20 @@
 #include "CudaRay.cuh"
 #include "CudaPrimitive.cuh"
 
+//#include "Bxdf.cuh"
+
 #define MAX_BOUNCE (6)
-#define RUSSIAN_ROULETTE_BOUNCE (4)
-#define PROB_STOP_BOUNCE (0.5f)
-#define NUM_MULTI_SAMPLE (8)
+#define RUSSIAN_ROULETTE_BOUNCE (3)
+#define PROB_STOP_BOUNCE (0.2f)
+#define NUM_MULTI_SAMPLE (4)
 #define NUM_SAMPLE (16)
 #define PI (3.141592f)
 #define INV_PI (1.f/3.141592f)
 
 #define checkCudaErrors(val) check_cuda( (val), #val, __FILE__, __LINE__ )
+
+#define CMP(x, y) \
+	(fabsf(x - y) <= FLT_EPSILON * cudamax(1.0f, cudamax(fabsf(x), fabsf(y))))
 
 void check_cuda(cudaError_t result, char const* const func, const char* const file, int const line) {
     if (result) {
@@ -34,11 +39,11 @@ __device__ float SampleHemisphere(curandState* state, vec3& direction, const vec
 {
     float prob;
 
-    float theta = acosf(sqrtf(curand_uniform(state)));
+    //float theta = acosf(sqrtf(curand_uniform(state)) - EPS);
     float phi = 2.f * PI * curand_uniform(state);
 
-    float cosTheta = cosf(theta);
-    float sinTheta = sinf(theta);
+    float cosTheta = sqrtf(curand_uniform(state)+EPS)-2.f*EPS;
+    float sinTheta = sqrtf(1.f - cosTheta * cosTheta);
     float cosPhi = cosf(phi);
     float sinPhi = sinf(phi);
 
@@ -47,6 +52,8 @@ __device__ float SampleHemisphere(curandState* state, vec3& direction, const vec
     float x = cosPhi * sinTheta;
     float y = sinPhi * sinTheta;
     float z = cosTheta;
+
+    void* a;
 
     //To world space
     direction = Normalize(x * tangent + y * bitangent + z * normal);
@@ -81,20 +88,29 @@ __device__ vec3 inv(const vec3& dir)
     return vec3(1.f / dir.x(), 1.f / dir.y(), 1.f / dir.z());
 }
 
-__device__ bool intersectionAABB(const Ray& ray,vec3 bMin, vec3 bMax) {
-    float tx1 = (bMin.x() - ray.org.x()) * (inv(ray.dir).x());
-    float tx2 = (bMax.x() - ray.org.x()) * (inv(ray.dir).x());
+__device__ bool intersectionAABB(const Ray& ray,vec3 bMin, vec3 bMax, float tmin, float tmax) 
+{
+    // Robust BVH Ray Traversal
+    // by Thiago Ize, Solid Angle
 
-    float tmin = cudamin(tx1, tx2);
-    float tmax = cudamax(tx1, tx2);
+    vec3 invD = Normalize(inv(ray.dir));
+    vec3 bounds[2] = { bMin, bMax };
+    int sign[3];
+    sign[0] = invD.x() < 0.f;
+    sign[1] = invD.y() < 0.f;
+    sign[2] = invD.z() < 0.f;
 
-    float ty1 = (bMin.y() - ray.org.y()) * (inv(ray.dir)).x();
-    float ty2 = (bMax.y() - ray.org.y()) * (inv(ray.dir)).x();
+    float txmin = (bounds[sign[0]].x() - ray.org.x()) * invD.x();
+    float txmax = (bounds[1-sign[0]].x() - ray.org.x()) * invD.x();
+    float tymin = (bounds[sign[1]].y() - ray.org.y()) * invD.y();
+    float tymax = (bounds[1-sign[1]].y() - ray.org.y()) * invD.y();
+    float tzmin = (bounds[sign[2]].z() - ray.org.z()) * invD.z();
+    float tzmax = (bounds[1-sign[2]].z() - ray.org.z()) * invD.z();
 
-    tmin = cudamax(tmin, cudamin(ty1, ty2));
-    tmax = cudamin(tmax, cudamax(ty1, ty2));
-
-    return tmax >= tmin;
+    tmin = cudamax(tzmin,cudamax(tymin, cudamax(txmin, tmin)));
+    tmax = cudamin(tzmax, cudamin(tymax, cudamin(txmax, tmax)));
+    tmax *= 1.00000024f;
+    return (tmin) <= (tmax);
 }
 
 #define PUSHBACK(val)     (stack[idx++]=val)
@@ -107,14 +123,27 @@ __device__ bool RayCast(const Ray& ray, Triangle* triangles, int Nt, CudaBVHNode
     float closestT = t_max;
 
     int idx = 0;
-    int stack[64];
+    int stack[128];
     PUSHBACK(0);
+    /*
+    for (int i = 0; i < Nt; i++)
+    {
+        if (triangles[i].hit(ray, t_min, closestT, tmpResult))
+        {
+            bHitInWorld = true;
+            closestT = tmpResult.t;
+            hitResult = tmpResult;
+        }
+    }
 
+    return bHitInWorld;
+    */
     while (idx > 0)
     {
         CudaBVHNode node = BVHTree[POPBACK()];
 
-        if (!intersectionAABB(ray, node.bMin, node.bMax))
+        //if (!intersectionAABB(ray, node.bMin, node.bMax, t_min-EPS, closestT+EPS))
+        if (!intersectionAABB(ray, node.bMin, node.bMax, t_min, closestT))
         {
             continue;
         }
@@ -163,16 +192,24 @@ __device__ Color GetLightColor(const vec3& position, const vec3& pointOnLight, T
     return color;
 }
 
-__device__ float GetLightPDF(const Ray& ray, Triangle& lightSource, HitResult& hitResult)
+__device__ float GetLightPDF(const Ray& ray, Triangle* lightSources, int Nl)
 {
-    if (lightSource.hit(ray, 0.f, 9999999.f, hitResult))
+    HitResult hitResult;
+    float pdf = 0.f;
+
+    for (int i = 0; i < Nl; i++)
     {
-        return 1.f / (lightSource.area) ;
+        if (lightSources[i].hit(ray, EPS, 99999.f, hitResult))
+        {
+            float cosA = (ray.dir.dot(hitResult.normal));
+            cosA = (cosA < 0.f)? -cosA:cosA;
+            float divisor = (cosA * lightSources->area);
+            if (divisor < EPS)
+                continue;
+            pdf += (ray.org - hitResult.p).squared_length() / divisor;
+        }
     }
-    else
-    {
-        return 0.f;
-    }
+    return pdf;
 }
 
 __device__ float GetHemiSpherePDF(const Ray& ray, vec3 normal)
@@ -180,47 +217,92 @@ __device__ float GetHemiSpherePDF(const Ray& ray, vec3 normal)
     return dot(ray.dir, normal);
 }
 
-__device__ float GetMISWeight(const Ray& ray, vec3 normal, Triangle* lightSources, int Nl)
-{
-    float divisor = 0.f;
-    float minDist = 99999999.f;
-    float prob = 0.f;;
-    HitResult hitResult;
-    for (int i = 0; i < Nl; i++)
-    {
-        divisor = GetLightPDF(ray, lightSources[i], hitResult);// *(1.f / (float)Nl);
-        float tmp = (hitResult.p - ray.org).length();
-        if (tmp < minDist)
-        {
-            minDist = tmp;
-            prob = divisor;
-        }
-    }
-
-    return prob * (1.f / (float)Nl);
-}
-
 __device__ Color GetColor_iter(const Ray& ray, Triangle* triangles, int Nt, CudaBVHNode* BVHTree, int Nb, Triangle* lights, int Nl, int Depth, curandState* s)
 {
     const Color Black(0.f, 0.f, 0.f);
 
-    Color color = Black;
-    Color reflections[MAX_BOUNCE];
     Color emittances = Black;
-    Color DirectLight[MAX_BOUNCE];
-
-    Color diffuseColor;
-    Color specularColor;
 
     HitResult hitResult;
     Ray currentRay = ray;
-    
+
+    Color radiance = Black;
+    Color weight(1.f, 1.f, 1.f);
+    vec3 wi;
+    float pdf;
+    float sample_light_pdf;
+    float sample_bxdf_pdf;
+    bool bDirectLight = false;
+    Color oldWeight(1.f,1.f,1.f);
+
+    void* a = (void*)nullptr;
     for (; Depth < MAX_BOUNCE; Depth++)
     {
-        diffuseColor = specularColor = Black;
-        DirectLight[Depth] = Black;
         if (RayCast(currentRay, triangles, Nt, BVHTree, Nb, hitResult))
-        { // Direct lighting
+        {
+            
+            if (Depth == 0)
+            {
+                radiance += weight * hitResult.mat.emittance;
+                bDirectLight = false;
+            }
+            //radiance += weight * hitResult.mat.emittance;
+
+
+            float selectedPdf;
+            float cosW;
+            vec3 reflectedRay;
+            float prob;
+
+            // NEE
+            int lightIdx = curand(s) % Nl;
+            vec3 SampledPoint;
+            float pdfLight = SamplePrimitive(s, SampledPoint, lights[lightIdx]) / ((float)Nl);
+
+            Color lightColor = GetLightColor(hitResult.p, SampledPoint, triangles, Nt, BVHTree, Nb);
+
+            cosW = dot(hitResult.normal, Normalize(SampledPoint - hitResult.p));
+            cosW = (cosW < 0.f) ? 0.f : cosW;
+
+            float cosA = dot(lights[lightIdx].normal, Normalize(hitResult.p - SampledPoint));
+            cosA = (cosA < 0.f) ? 0.f : cosA;
+
+            radiance += weight * INV_PI * hitResult.mat.albedo * cosW * cosA * lightColor / ((hitResult.p - SampledPoint).squared_length() * (pdfLight));
+
+            // bxdf sampling
+            prob = SampleHemisphere(s, reflectedRay, hitResult.normal, hitResult.tangent, hitResult.bitangent);
+            cosW = dot(hitResult.normal, reflectedRay);
+
+            weight *= INV_PI * hitResult.mat.albedo * cosW / prob;
+
+            if (Depth >= RUSSIAN_ROULETTE_BOUNCE)
+            {
+                float sample = curand_uniform(s);
+                float rrprob = cudamax(MaxFrom(weight), PROB_STOP_BOUNCE);
+                if (sample < rrprob)
+                {
+                    weight *= (1.f / rrprob);
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            currentRay.org = hitResult.p + hitResult.normal * 1e-2f;
+            currentRay.dir = reflectedRay;
+        }
+        else
+        {
+            radiance += weight * Black;
+        }
+    }
+    return radiance;
+            
+            
+            
+            /*
+            // Direct lighting
             int NUM_LIGHT_SAMPLE_SOURCE = 4;
             if (Nl > 0 && NUM_LIGHT_SAMPLE_SOURCE > 0)
             {
@@ -280,6 +362,7 @@ __device__ Color GetColor_iter(const Ray& ray, Triangle* triangles, int Nt, Cuda
         }
         else
         {
+            // Get light from environment
             reflections[Depth] = Black;
             DirectLight[Depth] = Black;
             Depth += 1;
@@ -292,6 +375,7 @@ __device__ Color GetColor_iter(const Ray& ray, Triangle* triangles, int Nt, Cuda
         color = color * reflections[Depth] + DirectLight[Depth];
     }
     return color + emittances;
+    */
 }
 __host__ __device__ Color ACESFilm(Color x)
 {
