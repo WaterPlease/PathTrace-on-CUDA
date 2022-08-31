@@ -1,6 +1,6 @@
 # Path tracer on CUDA
 
-![MainImg](./Img/Render/DiffuseRoom_MS8x2048spp8bounce_22min.png)
+![MainImg](./Img/Render/reflection.png)
 
 Simple path tracer renderer using CUDA.
 
@@ -10,11 +10,9 @@ Simple path tracer renderer using CUDA.
 
 - Path tracer on CUDA
   - BRDF
-    - Diffuse reflection (Lambertian)
     - Specular reflection
-  - Non recursive implementation
   - Monte Carlo integration
-    - NEE
+  - NEE
 - BVH Acceleration
   - BVH construction using SAH
   - [DEPRECATED] BVH construction using clustering algorithm
@@ -54,4 +52,4 @@ This project contains code from following open source software
 
 3. Mirror bunny
 
-![][./Img/Render/bunny.png]![][./Img/Render//Render/bunny2.png]
+![](./Img/Render/bunny2.png)![](./Img/Render/reflection.png)
