@@ -1,6 +1,6 @@
 #ifndef _BXDF_CUH_
 #define _BXDF_CUH_
-/*
+
 #include <cuda_runtime.h>
 #include "CudaVector.cuh"
 #include "CudaPrimitive.cuh"
@@ -10,20 +10,18 @@
 #define pif (3.141592f)
 #define invPif (1.f/3.141592f)
 
-inline vec3 lerp(const vec3& x, const vec3& y, float alpha)
+__device__ inline vec3 lerp(const vec3& x, const vec3& y, float alpha)
 {
     return x * (1.f - alpha) + y * alpha;
 }
 
-inline float mean(const vec3& v)
+__device__ inline float mean(const vec3& v)
 {
     return (v.x() + v.y() + v.z()) * 0.333333f;
 }
 
-__device__ vec3 _SampleHemisphere(curandState* state, vec3& direction, const vec3& normal, const vec3& tangent, const vec3& bitangent)
+__device__ vec3 SampleHemisphere(curandState* state, const vec3& normal, const vec3& tangent, const vec3& bitangent)
 {
-    float prob;
-
     //float theta = acosf(sqrtf(curand_uniform(state)) - EPS);
     float phi = 2.f * pif * curand_uniform(state);
 
@@ -39,9 +37,7 @@ __device__ vec3 _SampleHemisphere(curandState* state, vec3& direction, const vec
     float z = cosTheta;
 
     //To world space
-    direction = Normalize(x * tangent + y * bitangent + z * normal);
-
-    //return prob;
+    return Normalize(x * tangent + y * bitangent + z * normal);
 }
 
 
@@ -49,45 +45,45 @@ __device__ vec3 _SampleHemisphere(curandState* state, vec3& direction, const vec
 // by Fabio Pellacini.
 // Some part of the code may be modified. But lines that contains information about reference is not modified.
 
-
 // Convert eta to reflectivity
-inline vec3 eta_to_reflectivity(const vec3& eta) {
+__device__ inline vec3 eta_to_reflectivity(const vec3& eta) {
     return ((eta - 1.f) * (eta - 1.f)) / ((eta + 1) * (eta + 1));
 }
 // Convert reflectivity to  eta.
-inline vec3 reflectivity_to_eta(const vec3& reflectivity_) {
+__device__ inline vec3 reflectivity_to_eta(const vec3& reflectivity_) {
     auto reflectivity = clamp(reflectivity_, 0.0f, 0.99f);
     return (1 + sqrtf(reflectivity)) / (1 - sqrtf(reflectivity));
 }
 
-inline vec3 fresnel_schlick(
+__device__ inline vec3 fresnel_schlick(
     const vec3& specular, const vec3& normal, const vec3& outgoing) {
-    if (specular.squared_length() < EPS) return { 0, 0, 0 };
+    if (specular.squared_length() < EPS) return vec3(0, 0, 0);
     auto cosine = dot(normal, outgoing);
     return specular +
-        (1 - specular) * pow(clamp(1 - abs(cosine), 0.0f, 1.0f), 5.0f);
+        (1.f - specular) * powf(clamp(1 - fabs(cosine), EPS, 0.999f), 5.0f);
 }
 
-inline float microfacet_distribution(
+__device__ inline float microfacet_distribution(
     float roughness, const vec3& normal, const vec3& halfway, bool ggx) {
     // https://google.github.io/filament/Filament.html#materialsystem/specularbrdf
     // http://graphicrants.blogspot.com/2013/08/specular-brdf-reference.html
     auto cosine = dot(normal, halfway);
-    if (cosine <= 0) return 0;
+    if (cosine <= EPS) return 0;
     auto roughness2 = roughness * roughness;
     auto cosine2 = cosine * cosine;
+    auto divisor = (cosine2 * roughness2 + 1 - cosine2);
+    divisor = cudamax(divisor, 1e-2f);
     if (ggx) {
-        return roughness2 / (pif * (cosine2 * roughness2 + 1 - cosine2) *
-            (cosine2 * roughness2 + 1 - cosine2));
+        return roughness2 / (pif * divisor * divisor);
     }
     else {
-        return exp((cosine2 - 1) / (roughness2 * cosine2)) /
+        return expf((cosine2 - 1) / (roughness2 * cosine2)) /
             (pif * roughness2 * cosine2 * cosine2);
     }
 }
 
 // Evaluate the microfacet shadowing1
-inline float microfacet_shadowing1(float roughness, const vec3& normal,
+__device__ inline float microfacet_shadowing1(float roughness, const vec3& normal,
     const vec3& halfway, const vec3& direction, bool ggx) {
     // https://google.github.io/filament/Filament.html#materialsystem/specularbrdf
     // http://graphicrants.blogspot.com/2013/08/specular-brdf-reference.html
@@ -98,11 +94,11 @@ inline float microfacet_shadowing1(float roughness, const vec3& normal,
     auto roughness2 = roughness * roughness;
     auto cosine2 = cosine * cosine;
     if (ggx) {
-        return 2 * abs(cosine) /
-            (abs(cosine) + sqrt(cosine2 - roughness2 * cosine2 + roughness2));
+        return 2 * fabs(cosine) /
+            (fabs(cosine) + sqrtf(cosine2 - roughness2 * cosine2 + roughness2));
     }
     else {
-        auto ci = abs(cosine) / (roughness * sqrt(1 - cosine2));
+        auto ci = fabs(cosine) / (roughness * sqrtf(1 - cosine2));
         return ci < 1.6f ? (3.535f * ci + 2.181f * ci * ci) /
             (1.0f + 2.276f * ci + 2.577f * ci * ci)
             : 1.0f;
@@ -110,7 +106,7 @@ inline float microfacet_shadowing1(float roughness, const vec3& normal,
 }
 
 // Evaluate microfacet shadowing
-inline float microfacet_shadowing(float roughness, const vec3& normal,
+__device__ inline float microfacet_shadowing(float roughness, const vec3& normal,
     const vec3& halfway, const vec3& outgoing, const vec3& incoming,
     bool ggx) {
     return microfacet_shadowing1(roughness, normal, halfway, outgoing, ggx) *
@@ -118,79 +114,101 @@ inline float microfacet_shadowing(float roughness, const vec3& normal,
 }
 
 // Sample a microfacet distribution.
-inline vec3 sample_microfacet(
-    float roughness, const HitResult& hitResult, const vec3& rn, bool ggx) {
-    auto phi = 2 * pif * rn.x();
+__device__ inline vec3 sample_microfacet(
+    float roughness, const HitResult& hitResult, curandState* s, bool ggx = true) {
+    auto phi = 2 * pif * curand_uniform(s);
+    auto ry = curand_uniform(s);
     auto theta = 0.0f;
     if (ggx) {
-        theta = atan(roughness * sqrt(rn.y() / (1 - rn.y())));
+        theta = atanf(roughness * sqrtf(ry / (1.f - ry)));
     }
     else {
         auto roughness2 = roughness * roughness;
-        theta = atan(sqrt(-roughness2 * log(1 - rn.y())));
+        theta = atanf(sqrtf(-roughness2 * logf(clamp(1 - ry,EPS,0.999f))));
     }
     auto local_half_vector = vec3(
-        cos(phi) * sin(theta), sin(phi) * sin(theta), cos(theta));
+        cosf(phi) * sinf(theta), sinf(phi) * sinf(theta), cosf(theta));
     return local_half_vector.x() * hitResult.tangent + local_half_vector.y() * hitResult.bitangent + local_half_vector.z() * hitResult.normal;
 }
 
 // Pdf for microfacet distribution sampling.
-inline float sample_microfacet_pdf(
+__device__ inline float sample_microfacet_pdf(
     float roughness, const HitResult& hitResult, const vec3& halfway, bool ggx = true) {
     auto cosine = dot(hitResult.normal, halfway);
     if (cosine < 0) return 0;
     return microfacet_distribution(roughness, hitResult.normal, halfway, ggx) * cosine;
 }
 
-inline vec3 eval_gltfpbr(const vec3& color, float ior, float roughness,
+__device__ inline vec3 eval_gltfpbr(const vec3& color, const vec3& _reflectivity, float roughness,
     float metallic, const HitResult& hitResult, const vec3& outgoing,
     const vec3& incoming) {
     if (dot(hitResult.normal, incoming) * dot(hitResult.normal, outgoing) <= 0) return { 0, 0, 0 };
-    auto reflectivity = lerp(
-        eta_to_reflectivity(vec3{ ior, ior, ior }), color, metallic);
-    auto up_normal = dot(hitResult.normal, outgoing) <= 0 ? -hitResult.normal : hitResult.normal;
-    auto F1 = fresnel_schlick(reflectivity, up_normal, outgoing);
+    auto reflectivity = lerp(_reflectivity, color, metallic);
+    auto F1 = fresnel_schlick(reflectivity, hitResult.normal, outgoing);
     auto halfway = Normalize(incoming + outgoing);
     auto F = fresnel_schlick(reflectivity, halfway, incoming);
-    auto D = microfacet_distribution(roughness, up_normal, halfway);
+    auto D = microfacet_distribution(roughness, hitResult.normal, halfway, true);
     auto G = microfacet_shadowing(
-        roughness, up_normal, halfway, outgoing, incoming);
-    return color * (1 - metallic) * (1 - F1) / pif *
-        abs(dot(up_normal, incoming)) +
-        F * D * G / (4 * dot(up_normal, outgoing) * dot(up_normal, incoming)) *
-        abs(dot(up_normal, incoming));
+        roughness, hitResult.normal, halfway, outgoing, incoming, true);
+    vec3 k = (1 - metallic) * (1 - F1);
+    return color * k * invPif *
+        fabs(dot(hitResult.normal, incoming)) +
+        F * D * G / (4 * dot(hitResult.normal, outgoing) * dot(hitResult.normal, incoming)) *
+        fabs(dot(hitResult.normal, incoming));
 }
 
 // Sample a specular BRDF lobe.
-inline vec3 sample_gltfpbr(const vec3& color, float ior, float roughness,
-    float metallic, const HitResult& hitResult, const vec3& outgoing, float rnl,
-    const vec3& rn) {
-    auto up_normal = dot(hitResult.normal, outgoing) <= 0 ? -hitResult.normal : hitResult.normal;
-    auto reflectivity = lerp(
-        eta_to_reflectivity(vec3{ ior, ior, ior }), color, metallic);
-    if (rnl < mean(fresnel_schlick(reflectivity, up_normal, outgoing))) {
-        auto halfway = sample_microfacet(roughness, up_normal, rn);
+__device__ inline vec3 sample_gltfpbr(const vec3& color, const vec3& _reflectivity, float roughness,
+    float metallic, const HitResult& hitResult, const vec3& outgoing, curandState* s) {
+    auto reflectivity = lerp(_reflectivity, color, metallic);
+    if (curand_uniform(s) < mean(fresnel_schlick(reflectivity, hitResult.normal, outgoing))) {
+        auto halfway = sample_microfacet(roughness, hitResult, s);
         auto incoming = reflect(outgoing, halfway);
-        if (!same_hemisphere(up_normal, outgoing, incoming)) return { 0, 0, 0 };
+        if (dot(hitResult.normal, incoming) * dot(hitResult.normal, outgoing) <= 0) return { 0, 0, 0 };
         return incoming;
     }
     else {
-        return sample_hemisphere_cos(up_normal, rn);
+        return SampleHemisphere(s,hitResult.normal, hitResult.tangent, hitResult.bitangent);
     }
 }
 
 // Pdf for specular BRDF lobe sampling.
-inline float sample_gltfpbr_pdf(const vec3& color, float ior, float roughness,
+__device__ inline float sample_gltfpbr_pdf(const vec3& color, const vec3& _reflectivity, float roughness,
     float metallic, const HitResult& hitResult, const vec3& outgoing,
     const vec3& incoming) {
     if (dot(hitResult.normal, incoming) * dot(hitResult.normal, outgoing) <= 0) return 0;
     auto halfway = Normalize(outgoing + incoming);
-    auto reflectivity = lerp(
-        eta_to_reflectivity(vec3{ ior, ior, ior }), color, metallic);
+    auto reflectivity = lerp(_reflectivity, color, metallic);
     auto F = mean(fresnel_schlick(reflectivity, hitResult.normal, outgoing));
     return F * sample_microfacet_pdf(roughness, hitResult, halfway) /
-        (4 * abs(dot(outgoing, halfway))) +
+        (4 * fabs(dot(outgoing, halfway))) +
         (1 - F) * dot(hitResult.normal, incoming) * invPif;
 }
-*/
+
+
+// Evaluate a delta metal BRDF lobe.
+__device__ inline vec3 eval_reflective(const vec3& color, const vec3& _reflectivity, float roughness,
+    float metallic, const HitResult& hitResult, const vec3& outgoing,
+    const vec3& incoming) {
+    if (dot(hitResult.normal, incoming) * dot(hitResult.normal, outgoing) <= 0) return { 0, 0, 0 };
+    auto reflectivity = lerp(_reflectivity, color, metallic);
+    auto F1 = fresnel_schlick(reflectivity, hitResult.normal, outgoing);
+    auto F = fresnel_schlick(reflectivity, hitResult.normal, incoming);
+    vec3 k = (1 - metallic) * (1 - F1);
+    return color * k * invPif *
+        fabs(dot(hitResult.normal, incoming)) +
+        F * fabs(dot(hitResult.normal, incoming));
+}
+
+// Sample a delta metal BRDF lobe.
+__device__ inline vec3 sample_reflective(const vec3& eta,
+    const vec3& normal, const vec3& outgoing) {
+    return reflect(outgoing, normal);
+}
+
+// Pdf for delta metal BRDF lobe sampling.
+__device__ inline float sample_reflective_pdf(const vec3& eta,
+    const vec3& normal, const vec3& outgoing, const vec3& incoming) {
+    return 1;
+}
 #endif

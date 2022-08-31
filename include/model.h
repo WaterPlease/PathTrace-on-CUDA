@@ -173,7 +173,7 @@ private:
             aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
             aiColor3D basecolor(0.f, 0.f, 0.f);
             aiColor3D emissive(0.f, 0.f, 0.f);
-            aiColor3D specular(0.f, 0.f, 0.f);
+            aiColor3D specular(0.04f, 0.04f, 0.04f);
             ai_real metallic;
             ai_real roughness;
             ai_real opacity;
@@ -185,6 +185,9 @@ private:
             material->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughness);
             material->Get(AI_MATKEY_OPACITY, opacity);
 
+            //std::cout << "[" << basecolor.r << ", " << basecolor.g << ", " << basecolor.b << "]1" << std::endl;
+            //std::cout << "[" << specular.r << ", " << specular.g  << ", " << specular.b << "]2" << std::endl;
+
             vertex.mat.albedo.r = basecolor.r;
             vertex.mat.albedo.g = basecolor.g;
             vertex.mat.albedo.b = basecolor.b;
@@ -193,8 +196,13 @@ private:
             vertex.mat.emittance.g = emissive.g;
             vertex.mat.emittance.b = emissive.b;
 
-            vertex.mat.metallic = metallic;
+            vertex.mat.specular.r = specular.r;
+            vertex.mat.specular.g = specular.g;
+            vertex.mat.specular.b = specular.b;
+
+            vertex.mat.metallic = metallic; 
             vertex.mat.roughness = roughness;
+            //vertex.mat.roughness = glm::clamp(roughness,5e-3f,0.999f);
             vertex.mat.opacity = opacity;
 
             vertices.push_back(vertex);

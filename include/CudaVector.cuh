@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <iostream>
 
+#define CHECKNAN(x) if(isnan(x)) { void* a; *(int*)a=1; }
+#define CHECKINF(x) if(isinf(x)) { void* a; *(int*)a=1; }
 class vec3 {
 public:
     __host__ __device__ vec3() { }
@@ -227,6 +229,12 @@ __device__ inline float clamp(const float& v1, float minVal, float maxVal)
     return cudamin(cudamax(v1, minVal), maxVal);
 }
 
+__device__ inline vec3 fabsf(const vec3& v1)
+{
+
+    return  vec3(fabsf(v1.x()), fabsf(v1.y()), fabsf(v1.z()));
+}
+
 __device__ inline vec3 sqrtf(const vec3& v1)
 {
 
@@ -239,6 +247,25 @@ __device__ inline vec3 pow(const vec3& base,float expoenent)
     return  vec3(powf(base.x(), expoenent), powf(base.y(), expoenent), powf(base.z(), expoenent));
 }
 
+__device__ inline vec3 reflect(const vec3& w, const vec3& n) {
+    return -w + 2 * dot(n, w) * n;
+}
+
+__device__ inline vec3 refract(const vec3& w, const vec3& n, float inv_eta) {
+    auto cosine = dot(n, w);
+    auto k = 1 + inv_eta * inv_eta * (cosine * cosine - 1);
+    if (k < 0) return { 0, 0, 0 };  // tir
+    return -w * inv_eta + (inv_eta * cosine - sqrt(k)) * n;
+}
+
+__device__ inline bool isnan(const vec3& v)
+{
+    return isnan(v[0]) || isnan(v[1]) || isnan(v[2]);
+}
+__device__ inline bool isinf(const vec3& v)
+{
+    return isinf(v[0]) || isinf(v[1]) || isinf(v[2]);
+}
 __host__ __device__ inline float vec3::dot(const vec3& v2) const
 {
     vec3 multVec = (*this) * v2;
