@@ -51,21 +51,17 @@ public:
     __device__ virtual bool hit(const Ray& ray, float t_min, float t_max, HitResult& hitResult) = 0;
 };
 
-class World
-{
-public:
-    Hittable** hittables;
-};
-
 template <class T>
 __global__ void InitHittables(T* hittables, int Cnt, int offset=0)
 {
+    /*
     if (threadIdx.x != 0 || blockIdx.x != 0)
     {
         return;
     }
+    */
 
-    T* hittableWithVtable = new T;
+    T* hittableWithVtable = new T();
     for (int i = 0; i < (offset+Cnt); i++)
     {
         memcpy(&hittables[i], hittableWithVtable, sizeof(T));
@@ -97,13 +93,15 @@ public:
        vec3 P = cross(D, E2);
        vec3 Q = cross(T, E1);
        float det = dot(P, E1);
+//#define _TEST_CULL_
+//#ifdef _TEST_CULL_
+       ///*
        if (det < EPS) return false;
        float invDet = 1.f / det;
 
        hitResult.ray = ray;
        hitResult.t = dot(Q, E2) * invDet;
-       if (hitResult.t < EPS ||
-           hitResult.t < t_min ||
+       if (hitResult.t < t_min ||
            hitResult.t > t_max)
        {
            return false;
@@ -118,20 +116,42 @@ public:
 
        u *= invDet;
        v *= invDet;
+       //*/
+//#else
+       /*
+       if (det < EPS && det > -EPS) return false;
+       float invDet = 1.f / det;
+
+       float u = dot(P, T) * invDet;
+       if (u < 0.f || u > 1.f) return false;
+
+
+       float v = dot(Q, D) * invDet;
+       if (v < 0.f || (v + u) > 1.f) return false;
+
+       hitResult.ray = ray;
+       hitResult.t = dot(Q, E2) * invDet;
+       if (hitResult.t < t_min ||
+           hitResult.t > t_max)
+       {
+           return false;
+       }
+       */
+//#endif
+       hitResult.SetNormal(Normalize((1.f - v - u) * N0 + v * N1 + u * N2));
+       hitResult.tangent = Normalize((1.f - v - u) * T0 + v * T1 + u * T2);
+       hitResult.bitangent = Normalize((1.f - v - u) * B0 + v * B1 + u * B2);
 
        hitResult.u = (1.f - v - u) * u0 + v * u1 + u * u2;
        hitResult.v = (1.f - v - u) * v0 + v * v1 + u * v2;
 
        hitResult.p = ray.at(hitResult.t);
-       //hitResult.SetNormal(normal);
-       hitResult.SetNormal(Normalize((1.f - v - u) * N0 + v * N1 + u * N2));
-       hitResult.tangent = Normalize((1.f - v - u) * T0 + v * T1 + u * T2);
-       hitResult.bitangent=Normalize((1.f - v - u) * B0 + v * B1 + u * B2);
        hitResult.mat.albedo = mat0.albedo;
        hitResult.mat.emittance = mat0.emittance;
        hitResult.mat.specular = mat0.specular;
        hitResult.mat.metallic = mat0.metallic;
        hitResult.mat.roughness = mat0.roughness;
+       hitResult.mat.opacity = mat0.opacity;
 
        return true;
    }
@@ -219,16 +239,92 @@ struct alignas(8) CudaBVHNode
     vec3 bMin;
     vec3 bMax;
 
-    int parent;
     int childL;
     int childR;
 
     int primStart;
     int primEnd;
 };
-std::vector<CudaBVHNode> CudaBVH;
-std::vector<Triangle>    CudaPrims;
 
+class Sphere
+{
+public:
+    __host__ __device__ Sphere() : center(vec3(0.f,0.f,0.f)), rad(0.f), mat() { }
+    __host__ __device__ Sphere(float x, float y, float z, float rad, Material mat)
+        : center(vec3(x,y,z)), rad(rad), mat(mat) { }
+    __device__ bool hit(const Ray& ray, float t_min, float t_max, HitResult& hitResult) const
+    {
+        vec3 oc = ray.org - center;
+        auto a = ray.dir.squared_length();
+        auto half_b = dot(oc, ray.dir);
+        auto c = oc.squared_length() - rad * rad;
+
+        auto discriminant = half_b * half_b - a * c;
+        if (discriminant < 0) return false;
+        auto sqrtd = sqrt(discriminant);
+
+        // Find the nearest root that lies in the acceptable range.
+        auto root = (-half_b - sqrtd) / a;
+        if (root < t_min || t_max < root) {
+            root = (-half_b + sqrtd) / a;
+            if (root < t_min || t_max < root)
+                return false;
+        }
+
+        hitResult.ray = ray;
+        hitResult.t = root;
+        hitResult.p = ray.at(hitResult.t);
+        hitResult.SetNormal((hitResult.p - center)/rad);
+
+        vec3 v1, v2, v3;
+        v2 = vec3(0.f, 0.f, 1.f);
+        v2 = vec3(0.f, 1.f, 0.f);
+        v3 = vec3(1.f, 0.f, 0.f);
+
+        // Solution for getting tangent and bitangent vector from normal vector
+        // by Nathan Reed
+        // from : https://computergraphics.stackexchange.com/questions/5498/compute-sphere-tangent-for-normal-mapping
+        hitResult.tangent = Normalize(cross(vec3(0.f, 1.f, 0.f), hitResult.normal));
+        hitResult.bitangent = cross(hitResult.normal, hitResult.tangent);
+
+        hitResult.u = 0.f;
+        hitResult.v = 0.f;
+
+        //hitResult.SetNormal(normal);
+        hitResult.mat.albedo = mat.albedo;
+        hitResult.mat.emittance = mat.emittance;
+        //hitResult.mat.emittance = hitResult.normal * 0.5f + 0.5f;
+        hitResult.mat.specular = mat.specular;
+        hitResult.mat.metallic = mat.metallic;
+        hitResult.mat.roughness = mat.roughness;
+        hitResult.mat.opacity = mat.opacity;
+
+        return true;
+    }
+
+
+    __host__ __device__ void Copy(const Sphere& sphere)
+    {
+        Copy(sphere.center, sphere.rad, sphere.mat);
+    }
+
+    __host__ __device__ void Copy(
+        vec3 _center, float _rad, Material _mat)
+    {
+        center = _center;
+        rad = _rad;
+
+        mat = _mat;
+    }
+    vec3 center;
+    float rad;
+
+    Material mat;
+};
+
+extern std::vector<CudaBVHNode> CudaBVH;
+extern std::vector<Triangle>    CudaPrims;
+extern std::vector<Sphere>    CudaSpheres;
 
 #include "bvh.h"
 #include "mesh.h"
@@ -238,143 +334,5 @@ inline vec3 ConvertToCudaVec(const glm::vec3& v)
     return vec3(v.x, v.y, v.z);
 }
 
-__host__ void LoadFromBVH(BVH* bvh)
-{
-    CudaBVH.clear();
-    CudaPrims.clear();
-
-    BVHNode* root = bvh->rootBVH;
-    std::vector<BVHNode*> stack;
-    stack.push_back(root);
-    stack.push_back(root);
-    stack.push_back((BVHNode*)0);
-    stack.push_back((BVHNode*)0);
-
-    int maxDepth = -1;
-
-    while (!stack.empty())
-    {
-        int depth = (int)stack.back();
-        stack.pop_back();
-        int parentIdx = (int)stack.back();
-        stack.pop_back();
-        BVHNode* parent = stack.back();
-        stack.pop_back();
-        BVHNode* node = stack.back();
-        stack.pop_back();
-
-        int idx = CudaBVH.size();
-
-        if (maxDepth < depth)
-        {
-            maxDepth = depth;
-        }
-
-        CudaBVHNode cudaNode;
-        cudaNode.bMax = ConvertToCudaVec(node->bMax);
-        cudaNode.bMin = ConvertToCudaVec(node->bMin);
-        cudaNode.childL = cudaNode.childR = -1;
-        cudaNode.primStart = -1;
-        cudaNode.primEnd   = -1;
-
-        if (node->ptr_primitives != nullptr)
-        {
-            std::vector<unsigned int>& primInBB = *(node->ptr_primitives);
-            cudaNode.primStart = CudaPrims.size();
-            cudaNode.primEnd = CudaPrims.size() + primInBB.size() - 1;
-            for (auto primID : primInBB)
-            {
-                Primitive prim = bvh->primitives[primID];
-                Triangle tr;
-
-                tr.V0 = ConvertToCudaVec(prim.v1.Position);
-                tr.V1 = ConvertToCudaVec(prim.v2.Position);
-                tr.V2 = ConvertToCudaVec(prim.v3.Position);
-
-                tr.E1 = tr.V1 - tr.V0;
-                tr.E2 = tr.V2 - tr.V0;
-
-                tr.normal = Normalize(cross(tr.E1, tr.E2));
-
-                tr.T0 = Normalize(ConvertToCudaVec(prim.v1.Tangent));
-                tr.T1 = Normalize(ConvertToCudaVec(prim.v2.Tangent));
-                tr.T2 = Normalize(ConvertToCudaVec(prim.v3.Tangent));
-
-                tr.B0 = Normalize(ConvertToCudaVec(prim.v1.Bitangent));
-                tr.B1 = Normalize(ConvertToCudaVec(prim.v2.Bitangent));
-                tr.B2 = Normalize(ConvertToCudaVec(prim.v3.Bitangent));
-
-                tr.N0 = Normalize(ConvertToCudaVec(prim.v1.Normal));
-                tr.N1 = Normalize(ConvertToCudaVec(prim.v2.Normal));
-                tr.N2 = Normalize(ConvertToCudaVec(prim.v3.Normal));
-
-                tr.u0 = prim.v1.u;
-                tr.v0 = prim.v1.v;
-
-                tr.u1 = prim.v2.u;
-                tr.v1 = prim.v2.v;
-
-                tr.u2 = prim.v3.u;
-                tr.v2 = prim.v3.v;
-
-                tr.mat0.albedo = ConvertToCudaVec(prim.v1.mat.albedo);
-                tr.mat0.emittance = ConvertToCudaVec(prim.v1.mat.emittance);
-                tr.mat0.specular = ConvertToCudaVec(prim.v1.mat.specular);
-                tr.mat0.roughness = prim.v1.mat.roughness;
-                tr.mat0.metallic = prim.v1.mat.metallic;
-                tr.mat0.opacity = prim.v1.mat.opacity;
-
-                tr.mat1.albedo = ConvertToCudaVec(prim.v2.mat.albedo);
-                tr.mat1.emittance = ConvertToCudaVec(prim.v2.mat.emittance);
-                tr.mat1.specular = ConvertToCudaVec(prim.v2.mat.specular);
-                tr.mat1.roughness = prim.v2.mat.roughness;
-                tr.mat1.metallic = prim.v2.mat.metallic;
-                tr.mat1.opacity = prim.v2.mat.opacity;
-
-                tr.mat2.albedo = ConvertToCudaVec(prim.v3.mat.albedo);
-                tr.mat2.emittance = ConvertToCudaVec(prim.v3.mat.emittance);
-                tr.mat2.specular = ConvertToCudaVec(prim.v3.mat.specular);
-                tr.mat2.roughness = prim.v3.mat.roughness;
-                tr.mat2.metallic = prim.v3.mat.metallic;
-                tr.mat2.opacity = prim.v3.mat.opacity;
-
-                CudaPrims.push_back(tr);
-            }
-        }
-
-        if (idx != parentIdx)
-        {
-            CudaBVHNode& pNode = CudaBVH[parentIdx];
-            if (pNode.childL == -1)
-            {
-                pNode.childL = idx;
-            }
-            else if (pNode.childR == -1)
-            {
-                pNode.childR = idx;
-            }
-        }
-
-        CudaBVH.push_back(cudaNode);
-
-
-        if (node->Child[0] != nullptr)
-        {
-            stack.push_back(node->Child[0]);
-            stack.push_back(node);
-            stack.push_back((BVHNode*)idx);
-            stack.push_back((BVHNode*)(depth+1));
-        }
-        if (node->Child[1] != nullptr)
-        {
-            stack.push_back(node->Child[1]);
-            stack.push_back(node);
-            stack.push_back((BVHNode*)idx);
-            stack.push_back((BVHNode*)(depth + 1));
-        }
-    }
-
-    std::cout << "Maximum depth of tree : " << maxDepth << std::endl;
-}
-
+__host__ void LoadFromBVH(BVH* bvh);
 #endif

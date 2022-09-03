@@ -12,11 +12,11 @@
 
 #include "Bxdf.cuh"
 
-#define MAX_BOUNCE (6)
+#define MAX_BOUNCE (8)
 #define RUSSIAN_ROULETTE_BOUNCE (3)
 #define PROB_STOP_BOUNCE (0.5f)
-#define NUM_MULTI_SAMPLE (4)
-#define NUM_SAMPLE (1000)
+#define NUM_MULTI_SAMPLE (8)
+#define NUM_SAMPLE (1024)
 #define PI (3.141592f)
 #define INV_PI (1.f/3.141592f)
 
@@ -90,7 +90,7 @@ __device__ bool intersectionAABB(const Ray& ray,vec3 bMin, vec3 bMax, float tmin
 #define PUSHBACK(val)     (stack[idx++]=val)
 #define POPBACK()      (stack[--idx])
 
-__device__ bool RayCast(const Ray& ray, Triangle* triangles, int Nt, CudaBVHNode* BVHTree, int Nb, HitResult& hitResult, float t_min = 0.f, float t_max = 999999.f)
+__device__ bool RayCast(const Ray& ray, Triangle* triangles, int Nt, CudaBVHNode* BVHTree, int Nb, Sphere* spheres, int Ns, HitResult& hitResult, float t_min = 0.f, float t_max = 999999.f)
 {
     HitResult tmpResult;
     bool bHitInWorld = false;
@@ -132,17 +132,29 @@ __device__ bool RayCast(const Ray& ray, Triangle* triangles, int Nt, CudaBVHNode
         }
     }
 
+    //return bHitInWorld;
+
+    for (int i = 0; i < Ns; i++)
+    {
+        if (spheres[i].hit(ray, t_min, closestT, tmpResult))
+        {
+            bHitInWorld = true;
+            closestT = tmpResult.t;
+            hitResult = tmpResult;
+        }
+    }
+
     return bHitInWorld;
 }
 
-__device__ Color GetLightColor(const vec3& position, const vec3& pointOnLight, Triangle* triangles, int Nt, CudaBVHNode* BVHTree, int Nb)
+__device__ Color GetLightColor(const vec3& position, const vec3& pointOnLight, Triangle* triangles, int Nt, CudaBVHNode* BVHTree, int Nb, Sphere* spheres, int Ns)
 {
     Ray ray(position, pointOnLight - position);
     HitResult hitResult;
 
     Color color(0.f, 0.f, 0.f);
 
-    if (RayCast(ray, triangles, Nt, BVHTree, Nb, hitResult,0.f,(pointOnLight-position).length()+1.0f))
+    if (RayCast(ray, triangles, Nt, BVHTree, Nb, spheres, Ns, hitResult,0.f,(pointOnLight-position).length()+1.0f))
     {
         if ((hitResult.p - pointOnLight).length() < EPS)
         {
@@ -178,7 +190,7 @@ __device__ float GetHemiSpherePDF(const Ray& ray, vec3 normal)
     return dot(ray.dir, normal);
 }
 
-__device__ Color GetColor_iter(const Ray& ray, Triangle* triangles, int Nt, CudaBVHNode* BVHTree, int Nb, Triangle* lights, int Nl, int Depth, curandState* s)
+__device__ Color GetColor_iter(const Ray& ray, Triangle* triangles, int Nt, CudaBVHNode* BVHTree, int Nb, Triangle* lights, int Nl, Sphere* spheres, int Ns, curandState* s)
 {
     const Color Black(0.f, 0.f, 0.f);
 
@@ -196,29 +208,35 @@ __device__ Color GetColor_iter(const Ray& ray, Triangle* triangles, int Nt, Cuda
     Color oldWeight(1.f,1.f,1.f);
 
     void* a = (void*)nullptr;
+
+    bool bRefracted = false;
+    int RefractCnt = 0;
+
+    int Depth = 0;
     for (; Depth < MAX_BOUNCE; Depth++)
     {
-        if (RayCast(currentRay, triangles, Nt, BVHTree, Nb, hitResult))
+        if (RayCast(currentRay, triangles, Nt, BVHTree, Nb, spheres, Ns, hitResult))
         {
             if (hitResult.mat.emittance.squared_length() > EPS)
             {
                 radiance += weight * hitResult.mat.emittance;
-                break;
+                //break;
             }
-            //radiance += weight * hitResult.mat.emittance;
-
 
             float selectedPdf;
             float cosW;
             vec3 reflectedRay;
             float prob;
 
+            vec3 ior = reflectivity_to_eta(hitResult.mat.specular);
+
+
             // NEE
             int lightIdx = curand(s) % Nl;
             vec3 SampledPoint;
             float pdfLight = SamplePrimitive(s, SampledPoint, lights[lightIdx]) / ((float)Nl);
 
-            Color lightColor = GetLightColor(hitResult.p, SampledPoint, triangles, Nt, BVHTree, Nb);
+            Color lightColor = GetLightColor(hitResult.p, SampledPoint, triangles, Nt, BVHTree, Nb, spheres, Ns);
 
             cosW = dot(hitResult.normal, Normalize(SampledPoint - hitResult.p));
             cosW = (cosW < 0.f) ? 0.f : cosW;
@@ -226,8 +244,34 @@ __device__ Color GetColor_iter(const Ray& ray, Triangle* triangles, int Nt, Cuda
             float cosA = dot(lights[lightIdx].normal, Normalize(hitResult.p - SampledPoint));
             cosA = (cosA < 0.f) ? 0.f : cosA;
 
-            radiance += weight * eval_gltfpbr(hitResult.mat.albedo, hitResult.mat.specular, hitResult.mat.roughness, hitResult.mat.metallic, hitResult, -currentRay.dir, Normalize(SampledPoint - hitResult.p)) * lightColor * cosA / ((hitResult.p - SampledPoint).squared_length() * (pdfLight));
-            
+            vec3 brdfcos;
+            if (hitResult.mat.opacity < (1.f - EPS))
+            {
+                if (hitResult.mat.roughness < 1e-2f)
+                {
+                    brdfcos = eval_pure_refractive(hitResult.mat.albedo, ior[0], hitResult, -currentRay.dir, Normalize(SampledPoint - hitResult.p));
+                }
+                else
+                {
+
+                    brdfcos = eval_refractive(hitResult.mat.albedo, ior[0], hitResult.mat.roughness, hitResult, -currentRay.dir, Normalize(SampledPoint - hitResult.p));
+                }
+            }
+            else
+            {
+                if (hitResult.mat.roughness < 1e-2f)
+                {
+                    brdfcos = eval_reflective(hitResult.mat.albedo, hitResult.mat.specular, hitResult.mat.roughness, hitResult.mat.metallic, hitResult, -currentRay.dir, Normalize(SampledPoint - hitResult.p));
+                }
+                else
+                {
+                    brdfcos = eval_gltfpbr(hitResult.mat.albedo, hitResult.mat.specular, hitResult.mat.roughness, hitResult.mat.metallic, hitResult, -currentRay.dir, Normalize(SampledPoint - hitResult.p));
+                }    
+            }
+            if(!isnan(brdfcos))
+                radiance += weight * brdfcos * lightColor * cosA / ((hitResult.p - SampledPoint).squared_length() * (pdfLight));
+
+
 
             // bxdf sampling
             //prob = SampleHemisphere(s, reflectedRay, hitResult.normal, hitResult.tangent, hitResult.bitangent);
@@ -236,38 +280,88 @@ __device__ Color GetColor_iter(const Ray& ray, Triangle* triangles, int Nt, Cuda
             float w2 = 0.f;
             vec3 currentWeight;
 
-            if (hitResult.mat.roughness < 1e-2f)
+            int OPAQUE;
+            if (hitResult.mat.opacity < (1.f-EPS))
             {
-                reflectedRay = sample_reflective(hitResult.mat.albedo, hitResult.normal, -currentRay.dir);
-                w1 = eval_reflective(hitResult.mat.albedo, hitResult.mat.specular, hitResult.mat.roughness, hitResult.mat.metallic, hitResult, -currentRay.dir, reflectedRay);
-                w2 = sample_reflective_pdf(hitResult.mat.albedo, hitResult.normal, -currentRay.dir, reflectedRay);
-                currentWeight = w1 / w2;
+                if (hitResult.mat.roughness < 1e-2f)
+                {
+                    reflectedRay = sample_pure_refractive(hitResult.mat.albedo, ior[0], hitResult, -currentRay.dir, s);
+                    w1 = eval_pure_refractive(hitResult.mat.albedo, ior[0], hitResult, -currentRay.dir, reflectedRay);
+                    w2 = sample_pure_refractive_pdf(hitResult.mat.albedo, ior[0], hitResult, -currentRay.dir, reflectedRay);
+                    w2 = cudamax(w2, 1e-2f);
+                    currentWeight = w1 / w2;
+                }
+                else
+                {
+                    reflectedRay = sample_refractive(hitResult.mat.albedo, ior[0], hitResult.mat.roughness, hitResult, -currentRay.dir, s);
+                    w1 = eval_refractive(hitResult.mat.albedo, ior[0], hitResult.mat.roughness, hitResult, -currentRay.dir, reflectedRay);
+                    w2 = sample_refractive_pdf(hitResult.mat.albedo, ior[0], hitResult.mat.roughness, hitResult, -currentRay.dir, reflectedRay);
+                    w2 = cudamax(w2, 1e-2f);
+                    currentWeight = w1 / w2;
+                }
+
+                int transparentProb = 1;
+                assert(transparentProb && !isnan(currentWeight));
+                assert(!isnan(reflectedRay));
+
+                bRefracted = dot(hitResult.normal, -currentRay.dir) * dot(hitResult.normal, reflectedRay) <= 0.f;
             }
             else
             {
-                reflectedRay = sample_gltfpbr(hitResult.mat.albedo, hitResult.mat.specular, hitResult.mat.roughness, hitResult.mat.metallic, hitResult, -currentRay.dir, s);
-                w1 = eval_gltfpbr(hitResult.mat.albedo, hitResult.mat.specular, hitResult.mat.roughness, hitResult.mat.metallic, hitResult, -currentRay.dir, reflectedRay);
-                w2 = sample_gltfpbr_pdf(hitResult.mat.albedo, hitResult.mat.specular, hitResult.mat.roughness, hitResult.mat.metallic, hitResult, -currentRay.dir, reflectedRay);
-                if (isnan(w1) || isnan(w2)) break;
-                w2 = cudamax(w2, 1e-2f);
-                currentWeight = w1 / w2;
-            }
+                if (hitResult.mat.roughness < 1e-2f)
+                {
+                    reflectedRay = sample_reflective(hitResult.mat.albedo, hitResult.normal, -currentRay.dir);
+                    w1 = eval_reflective(hitResult.mat.albedo, hitResult.mat.specular, hitResult.mat.roughness, hitResult.mat.metallic, hitResult, -currentRay.dir, reflectedRay);
+                    w2 = sample_reflective_pdf(hitResult.mat.albedo, hitResult.normal, -currentRay.dir, reflectedRay);
+                    w2 = cudamax(w2, 1e-2f);
+                    currentWeight = w1 / w2;
+                }
+                else
+                {
+                    reflectedRay = sample_gltfpbr(hitResult.mat.albedo, hitResult.mat.specular, hitResult.mat.roughness, hitResult.mat.metallic, hitResult, -currentRay.dir, s);
+                    
+                    assert(!isnan(hitResult.tangent));
+                    assert(!isnan(hitResult.bitangent));
+                    w1 = eval_gltfpbr(hitResult.mat.albedo, hitResult.mat.specular, hitResult.mat.roughness, hitResult.mat.metallic, hitResult, -currentRay.dir, reflectedRay);
+                    w2 = sample_gltfpbr_pdf(hitResult.mat.albedo, hitResult.mat.specular, hitResult.mat.roughness, hitResult.mat.metallic, hitResult, -currentRay.dir, reflectedRay);
+                    w2 = cudamax(w2, 1e-2f);
+                    currentWeight = w1 / w2;
+                }
 
-            weight *= currentWeight;
+
+                int opaqueProb = 1;
+                assert(opaqueProb && !isnan(currentWeight));
+            }
+            if (reflectedRay.squared_length() > EPS)
+                weight *= currentWeight;
+            else
+                break;
+
             assert(!isnan(w1));
             assert(!isnan(w2));
             assert(!isinf(w1));
             assert(!isinf(w2));
-            assert(!isinf(1.f/w2));
+            assert(!isinf(1.f / w2));
             assert(!isnan(1.f / w2));
             assert(!isnan(currentWeight));
-            
-            CHECKNAN(weight)
+            //CHECKNAN(weight)
+
+            currentRay.org = hitResult.p + hitResult.normal * (bRefracted? -EPS : EPS);
+            currentRay.dir = reflectedRay;
+            if (bRefracted)
+            {
+                Depth--;
+                if (RefractCnt++>8)
+                {
+                    break;
+                }
+                continue;
+            }
 
             if (Depth >= RUSSIAN_ROULETTE_BOUNCE)
             {
                 float sample = curand_uniform(s);
-                float rrprob = cudamax(cudamin(MaxFrom(weight),1.f), PROB_STOP_BOUNCE);
+                float rrprob = cudamax(cudamin(MaxFrom(weight), 1.f), PROB_STOP_BOUNCE);
                 if (sample < rrprob)
                 {
                     weight *= (1.f / rrprob);
@@ -277,9 +371,6 @@ __device__ Color GetColor_iter(const Ray& ray, Triangle* triangles, int Nt, Cuda
                     break;
                 }
             }
-
-            currentRay.org = hitResult.p + hitResult.normal * 1e-2f;
-            currentRay.dir = reflectedRay;
         }
         else
         {

@@ -13,6 +13,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/glm.hpp>
 
+#include "CudaPrimitive.cuh"
+#include "CudaVector.cuh"
+
 Renderer::Renderer()
 {
     /* Initialize the library */
@@ -103,12 +106,43 @@ void Renderer::Run()
     Models.push_back(CornellBox);
 
     Model* Bunny = new Model("C:\\Users\\kwonh\\Desktop\\study\\Graphics\\PathTrace_GPGPU\\resources\\models\\bunny.obj");
-    Bunny->translation = glm::vec3(5.f, -5.f, 0.f);
+    Bunny->translation = glm::vec3(5.f, 2.5f, -1.f);
     Bunny->rotation = glm::vec4(0.f);
     Bunny->scale = 130.f;
     //Bunny->scale = .2f;
-    Models.push_back(Bunny);
-     
+    //Models.push_back(Bunny);
+
+    Model* sphereModel = new Model("C:\\Users\\kwonh\\Desktop\\study\\Graphics\\PathTrace_GPGPU\\resources\\models\\sphere.obj");
+    sphereModel->translation = glm::vec3(0.f, 8.5f,-10.f);
+    sphereModel->scale = 8.f;
+    //Models.push_back(sphereModel);
+    std::cout << 
+        "ALBEDO : " << sphereModel->meshes[0].vertices[0].mat.albedo.r << ", " << sphereModel->meshes[0].vertices[0].mat.albedo.g << ", " << sphereModel->meshes[0].vertices[0].mat.albedo.b << std::endl <<
+        "ALBEDO : " << sphereModel->meshes[0].vertices[0].mat.emittance.r << ", " << sphereModel->meshes[0].vertices[0].mat.emittance.g << ", " << sphereModel->meshes[0].vertices[0].mat.emittance.b << std::endl <<
+        "specular  : " << sphereModel->meshes[0].vertices[0].mat.specular.r << ", " << sphereModel->meshes[0].vertices[0].mat.specular.g << ", " << sphereModel->meshes[0].vertices[0].mat.specular.b << std::endl <<
+        "rough : " << sphereModel->meshes[0].vertices[0].mat.roughness << ", " << std::endl;
+
+    float rad = 13.f;
+    Material mat;
+    mat.albedo = Color(1.f, 1.f, 1.f);
+    mat.emittance = Color(0.f,0.f,0.f);
+    mat.specular = Color(0.04f, 0.04f, 0.04f);
+    mat.metallic = 1.f;
+    mat.opacity = 1.0f;
+    mat.roughness = 0.2f;
+
+    Sphere s1(0.f, 0.f, 0.f, rad,mat);
+    CudaSpheres.push_back(s1);
+    
+    rad = 13.f;
+    mat.specular = Color(0.04f, 0.04f, 0.04f);
+    mat.metallic = 1.f;
+    mat.opacity = 0.0f;
+    mat.roughness = 0.05f;
+    //Sphere s2(rad+0.2f, rad + 0.5f, 0.f, rad, mat);
+    Sphere s2(0.f, 39.f, 0.f, rad, mat);
+    CudaSpheres.push_back(s2);
+
     bvh.Init();
     for (auto model : Models)
     {
@@ -123,6 +157,7 @@ void Renderer::Run()
 
     double currentTime = glfwGetTime();
     double lastTime = currentTime;
+    renderMode = RENDER_MODE::RM_DEFAULT;
     while (!glfwWindowShouldClose(window))
     {
         currentTime = glfwGetTime();
@@ -138,8 +173,6 @@ void Renderer::Run()
         {
         case RENDER_MODE::RM_DEFAULT:
             
-            shader->use();
-
             shader->use();
             shader->setMat4("view", camera->GetViewMat());
             shader->setMat4("projection", camera->GetProjMat());
@@ -158,6 +191,19 @@ void Renderer::Run()
             break;
         default:
             break;
+        }
+
+        for (auto sphere : CudaSpheres)
+        {
+            shader->use();
+
+            shader->setMat4("view", camera->GetViewMat());
+            shader->setMat4("projection", camera->GetProjMat());
+
+            sphereModel->scale = sphere.rad;
+            sphereModel->translation = glm::vec3(sphere.center.x(), sphere.center.y(), sphere.center.z());
+
+            sphereModel->Draw(shader);
         }
 
         if (bShowBVH)

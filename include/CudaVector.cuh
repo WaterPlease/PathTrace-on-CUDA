@@ -31,6 +31,7 @@ public:
     __host__ __device__ inline vec3& operator/=(const vec3& v2);
     __host__ __device__ inline vec3& operator*=(const float t);
     __host__ __device__ inline vec3& operator/=(const float t);
+    __host__ __device__ inline vec3& operator=(const vec3& v2);
 
     __host__ __device__ inline float length() const { return sqrt(e[0] * e[0] + e[1] * e[1] + e[2] * e[2]); }
     __host__ __device__ inline float squared_length() const { return e[0] * e[0] + e[1] * e[1] + e[2] * e[2]; }
@@ -153,6 +154,14 @@ __host__ __device__ inline vec3& vec3::operator/=(const float t) {
     e[0] *= k;
     e[1] *= k;
     e[2] *= k;
+    return *this;
+}
+inline __host__ __device__ vec3& vec3::operator=(const vec3& v2)
+{
+    e[0] = v2[0];
+    e[1] = v2[1];
+    e[2] = v2[2];
+
     return *this;
 }
 __host__ __device__ inline float MaxFrom(const vec3& v)

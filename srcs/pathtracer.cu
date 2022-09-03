@@ -39,7 +39,7 @@ __device__ vec3 GetPixelDirection(int px, int py, curandState *s)
 	return direction;
 }
 extern __shared__ float array[];
-__global__ void StartRender(int W, int H, Color* image, Triangle* triangles, int Nt, CudaBVHNode* BVHTree, int Nb, Triangle* lights, int Nl, int SampleIDX)
+__global__ void StartRender(int W, int H, Color* image, Triangle* triangles, int Nt, CudaBVHNode* BVHTree, int Nb, Triangle* lights, int Nl, Sphere* spheres, int Ns, int SampleIDX)
 {
 	/*
 	Triangle* blockTriangles = new Triangle[Nt];// (Triangle*)array;
@@ -76,7 +76,7 @@ __global__ void StartRender(int W, int H, Color* image, Triangle* triangles, int
 		Color pixelColor(0.f,0.f,0.f);
 		for (int i = 0; i < NUM_SAMPLE; i++)
 		{
-			pixelColor += GetColor_iter(Ray(CameraPos, direction), triangles, Nt, BVHTree, Nb, lights, Nl, 0, &s);
+			pixelColor += GetColor_iter(Ray(CameraPos, direction), triangles, Nt, BVHTree, Nb, lights, Nl, spheres, Ns, &s);
 		}
 		image[offset] += pixelColor / (float)(NUM_SAMPLE);
 	}
@@ -148,12 +148,17 @@ void PathTracer::Render(Camera& camera, BVH* bvh)
 	Triangle* lightSources;
 	int NumLightSource = 0;
 
+	Sphere* spheres;
+	int NumSphere = CudaSpheres.size();
+
 	checkCudaErrors(cudaMallocManaged(&triangles, sizeof(Triangle) * NumTriangle));
 	checkCudaErrors(cudaMallocManaged(&lightSources, sizeof(Triangle) * NumTriangle));
+	checkCudaErrors(cudaMallocManaged(&spheres, sizeof(Sphere) * NumSphere));
 	checkCudaErrors(cudaMallocManaged(&BVHTree, sizeof(CudaBVHNode) * NumTreeNode));
 
 	InitHittables<Triangle> << <1, 1 >> > (triangles, NumTriangle, 0);
 	InitHittables<Triangle> << <1, 1 >> > (lightSources, NumTriangle, 0);
+	InitHittables<Sphere> << <1, 1 >> > (spheres, NumSphere, 0);
 	checkCudaErrors(cudaDeviceSynchronize());
 
 	for (int i = 0; i < NumTriangle; i++)
@@ -166,6 +171,12 @@ void PathTracer::Render(Camera& camera, BVH* bvh)
 			std::cout << "ADD light" << std::endl;
 			lightSources[NumLightSource++].Copy(CudaPrims[i]);
 		}
+	}
+	checkCudaErrors(cudaDeviceSynchronize());
+
+	for (int i = 0; i < NumSphere; i++)
+	{
+		spheres[i].Copy(CudaSpheres[i]);
 	}
 	checkCudaErrors(cudaDeviceSynchronize());
 
@@ -225,7 +236,7 @@ void PathTracer::Render(Camera& camera, BVH* bvh)
 	for (int i = 0; i < NUM_MULTI_SAMPLE; i++)
 	{
 		//ImageTest<<<numBlock,threadPerBlock>>>(W, H, rawData);
-		StartRender << <gridDim, blockDim >> > (W, H, rawData, triangles, NumTriangle, BVHTree, NumTreeNode, lightSources, NumLightSource, i);
+		StartRender << <gridDim, blockDim >> > (W, H, rawData, triangles, NumTriangle, BVHTree, NumTreeNode, lightSources, NumLightSource, spheres , NumSphere,i);
 		checkCudaErrors(cudaGetLastError());
 		checkCudaErrors(cudaDeviceSynchronize());
 		checkCudaErrors(cudaGetLastError());
@@ -241,6 +252,8 @@ void PathTracer::Render(Camera& camera, BVH* bvh)
 
 	checkCudaErrors(cudaFree(rawData));
 
+	cudaFree(spheres);
+	cudaFree(lightSources);
 	cudaFree(triangles);
 	cudaFree(BVHTree);
 }

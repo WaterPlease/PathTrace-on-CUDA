@@ -174,9 +174,9 @@ private:
             aiColor3D basecolor(0.f, 0.f, 0.f);
             aiColor3D emissive(0.f, 0.f, 0.f);
             aiColor3D specular(0.04f, 0.04f, 0.04f);
-            ai_real metallic;
-            ai_real roughness;
-            ai_real opacity;
+            ai_real metallic = 0.0f;
+            ai_real roughness = 0.0f;
+            ai_real opacity = 1.0f;
 
             material->Get(AI_MATKEY_COLOR_DIFFUSE, basecolor);
             material->Get(AI_MATKEY_COLOR_EMISSIVE, emissive);
@@ -187,6 +187,7 @@ private:
 
             //std::cout << "[" << basecolor.r << ", " << basecolor.g << ", " << basecolor.b << "]1" << std::endl;
             //std::cout << "[" << specular.r << ", " << specular.g  << ", " << specular.b << "]2" << std::endl;
+            //std::cout << "OPACITY : " << opacity <<"  => Test result = " << (opacity < (1.f - 0.0001f)) << std::endl;
 
             vertex.mat.albedo.r = basecolor.r;
             vertex.mat.albedo.g = basecolor.g;
