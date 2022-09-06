@@ -11,6 +11,7 @@ Simple path tracer renderer using CUDA.
 - Path tracer on CUDA
   - BRDF
     - Specular reflection
+    - Refraction
   - Monte Carlo integration
   - NEE
 - BVH Acceleration
@@ -26,7 +27,6 @@ Simple path tracer renderer using CUDA.
 
 ### To be implemented later...
 
-- Refraction,...
 - optimizations.,
   - metropolis light transformation?
 
@@ -61,6 +61,12 @@ This project contains code from following open source software
 
 ![](./Img/Render/DiffuseRoom_MS8x2048spp_13min.png)
 
-3. Mirror bunny
+3. bunny
 
 ![](./Img/Render/bunny2.png)![](./Img/Render/reflection.png)
+
+4. Reflection and refraction
+
+![](./Img/Render/refraction (2).png)![](./Img/Render/refraction.png)
+
+![](./Img/Render/reflection_refraction.png)
